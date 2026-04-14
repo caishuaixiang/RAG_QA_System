@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.example.rag_qa_system.mapper.DocumentChunkMapper">
+
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO document_chunk (
+            document_id,
+            chunk_content,
+            chunk_index,
+            vector_id,
+            tags,
+            status,
+            create_time
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.documentId}, #{item.chunkContent}, #{item.chunkIndex},
+             #{item.vectorId}, #{item.tags}, #{item.status},
+             #{item.createTime})
+        </foreach>
+    </insert>
+
+</mapper>

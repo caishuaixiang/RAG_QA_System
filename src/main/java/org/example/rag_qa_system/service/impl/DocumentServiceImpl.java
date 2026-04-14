@@ -1,0 +1,138 @@
+package org.example.rag_qa_system.service.impl;
+
+import org.example.rag_qa_system.entity.Document;
+import org.example.rag_qa_system.entity.DocumentChunk;
+import org.example.rag_qa_system.mapper.DocumentMapper;
+import org.example.rag_qa_system.service.DocumentService;
+import org.example.rag_qa_system.service.DocumentChunkService;
+import org.example.rag_qa_system.service.VectorDatabaseService;
+import org.example.rag_qa_system.utils.DocumentParser;
+import org.example.rag_qa_system.utils.FileUtils;
+import org.example.rag_qa_system.utils.TextChunker;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.File;
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.util.List;
+
+/**
+ * 文档服务实现类
+ */
+@Service
+public class DocumentServiceImpl implements DocumentService {
+
+    @Autowired
+    private DocumentMapper documentMapper;
+
+    @Autowired
+    private DocumentParser documentParser;
+
+    @Autowired
+    @Qualifier("vectorDatabaseServiceImpl")
+    private VectorDatabaseService vectorDatabaseService;
+
+    @Autowired
+    private DocumentChunkService documentChunkService;
+
+    @Autowired
+    private FileUtils fileUtils;
+
+    @Override
+    public Document uploadDocument(MultipartFile file, String knowledgeDomain) throws Exception {
+        // 保存文件到本地
+        String fileName = file.getOriginalFilename();
+        String filePath = fileUtils.saveFile(file);
+
+        // 创建文档对象
+        Document document = new Document();
+        document.setName(fileName);
+        document.setOriginalName(fileName);
+        document.setType(fileUtils.getFileType(fileName));
+        document.setSize(file.getSize());
+        document.setPath(filePath);
+        document.setKnowledgeDomain(knowledgeDomain);
+        document.setStatus(0); // 未处理
+        document.setCreateTime(LocalDateTime.now());
+        document.setUpdateTime(LocalDateTime.now());
+
+        // 保存文档信息到数据库
+        documentMapper.insert(document);
+
+        return document;
+    }
+
+    @Override
+    public List<Document> getDocumentList(String knowledgeDomain, Integer status) {
+        if (knowledgeDomain != null && !knowledgeDomain.isEmpty() && status != null) {
+            return documentMapper.findByStatus(status);
+        } else if (knowledgeDomain != null && !knowledgeDomain.isEmpty()) {
+            // 这里需要根据实际需求查询
+            return documentMapper.findByStatus(0);
+        } else if (status != null) {
+            return documentMapper.findByStatus(status);
+        } else {
+            return documentMapper.findByUserId(1L); // 需要从上下文获取用户ID
+        }
+    }
+
+    @Override
+    public List<Document> getDocumentsByUserId(Long userId) {
+        return documentMapper.findByUserId(userId);
+    }
+
+    @Override
+    public Document getDocumentById(Long id) {
+        return documentMapper.findById(id);
+    }
+
+    @Override
+    public void deleteDocument(Long id) {
+        // 删除文档文件
+        Document document = documentMapper.findById(id);
+        if (document != null && document.getFilePath() != null) {
+            File file = new File(document.getFilePath());
+            if (file.exists()) {
+                file.delete();
+            }
+        }
+
+        // 删除文档切片
+        documentChunkService.deleteChunksByDocumentId(id);
+
+        // 删除文档记录
+        documentMapper.delete(id);
+    }
+
+    @Override
+    public void updateDocument(Document document) {
+        document.setUpdateTime(LocalDateTime.now());
+        documentMapper.update(document);
+    }
+
+    @Override
+    public void processDocument(Long documentId) throws Exception {
+        Document document = documentMapper.findById(documentId);
+        if (document == null) {
+            throw new Exception("文档不存在");
+        }
+
+        // 解析文档内容
+        String content = documentParser.parseDocument(document.getFilePath());
+        document.setContent(content);
+        document.setStatus(1); // 已处理
+        document.setUpdateTime(LocalDateTime.now());
+        documentMapper.update(document);
+
+        // 文档切片
+        List<String> textChunks = TextChunker.smartSplit(content, 500); // 每个切片最大500字符
+        documentChunkService.createChunks(documentId, textChunks);
+
+        // 向量化
+        List<DocumentChunk> documentChunks = documentChunkService.getChunksByDocumentId(documentId);
+        vectorDatabaseService.addChunksToVectorDB(documentId, documentChunks);
+    }
+}
