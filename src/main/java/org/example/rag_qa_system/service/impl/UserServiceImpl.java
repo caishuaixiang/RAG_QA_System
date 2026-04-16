@@ -49,4 +49,36 @@ public class UserServiceImpl implements UserService {
     public List<User> getAllUsers() {
         return userMapper.findAll();
     }
+
+    @Override
+    public void updateUser(User user) {
+        user.setUpdateTime(LocalDateTime.now());
+        userMapper.update(user);
+    }
+
+    @Override
+    public boolean changePassword(Long userId, String oldPassword, String newPassword) {
+        User user = userMapper.findById(userId);
+        if (user == null) {
+            return false;
+        }
+
+        // 验证旧密码
+        String encryptedOldPassword = DigestUtils.md5DigestAsHex(oldPassword.getBytes());
+        if (!user.getPassword().equals(encryptedOldPassword)) {
+            return false;
+        }
+
+        // 更新密码
+        String encryptedNewPassword = DigestUtils.md5DigestAsHex(newPassword.getBytes());
+        user.setPassword(encryptedNewPassword);
+        user.setUpdateTime(LocalDateTime.now());
+        userMapper.update(user);
+        return true;
+    }
+
+    @Override
+    public void deleteUser(Long userId) {
+        userMapper.delete(userId);
+    }
 }

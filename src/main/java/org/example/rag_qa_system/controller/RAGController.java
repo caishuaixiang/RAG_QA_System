@@ -4,6 +4,7 @@ import org.example.rag_qa_system.entity.Document;
 import org.example.rag_qa_system.entity.DocumentChunk;
 import org.example.rag_qa_system.entity.QuestionAnswer;
 import org.example.rag_qa_system.service.DocumentChunkService;
+import org.example.rag_qa_system.service.DocumentService;
 import org.example.rag_qa_system.service.QuestionAnswerService;
 import org.example.rag_qa_system.service.VectorDatabaseService;
 import org.example.rag_qa_system.utils.LLMUtils;
@@ -36,6 +37,9 @@ public class RAGController {
     private DocumentChunkService documentChunkService;
 
     @Autowired
+    private DocumentService documentService;
+
+    @Autowired
     private QuestionAnswerService questionAnswerService;
 
     @Autowired
@@ -50,7 +54,7 @@ public class RAGController {
      */
     @PostMapping("/ask")
     public Result askQuestion(@RequestParam String question,
-                            @RequestParam Long userId) {
+                              @RequestParam Long userId) {
         try {
             // 1. 向量化问题
             float[] questionVector = vectorUtils.getVector(question);
@@ -74,7 +78,13 @@ public class RAGController {
             qa.setSource(sourceInfo);
             questionAnswerService.saveQuestionAnswer(qa);
 
-            return Result.success(answer);
+            // 5. 构建返回结果（包含答案和溯源信息）
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("answer", answer);
+            responseData.put("sources", SourceInfo.parseSourceInfo(sourceInfo));
+            responseData.put("sourceText", SourceInfo.formatSourceInfoAsText(sourceInfo));
+
+            return Result.success(responseData);
         } catch (Exception e) {
             return Result.error("问答失败: " + e.getMessage());
         }
@@ -90,26 +100,34 @@ public class RAGController {
         List<DocumentChunk> relevantChunks = vectorDatabaseService.searchSimilarChunks(questionVector, 3);
 
         List<String> chunkContents = new ArrayList<>();
-        List<Document> documents = new ArrayList<>();
+        Map<Long, Document> documentMap = new HashMap<>();
         List<Double> similarities = new ArrayList<>();
 
         for (DocumentChunk chunk : relevantChunks) {
             chunkContents.add(chunk.getChunkContent());
 
-            // 获取文档信息（简化版，实际需要从数据库查询）
-            Document document = new Document();
-            document.setId(chunk.getDocumentId());
-            document.setName("文档" + chunk.getDocumentId());
-            document.setKnowledgeDomain("知识域" + chunk.getDocumentId());
-            documents.add(document);
+            // 获取文档信息
+            if (!documentMap.containsKey(chunk.getDocumentId())) {
+                Document document = documentService.getDocumentById(chunk.getDocumentId());
+                if (document != null) {
+                    documentMap.put(chunk.getDocumentId(), document);
+                } else {
+                    // 如果文档不存在，创建一个默认文档对象
+                    Document defaultDoc = new Document();
+                    defaultDoc.setId(chunk.getDocumentId());
+                    defaultDoc.setName("文档" + chunk.getDocumentId());
+                    defaultDoc.setKnowledgeDomain("未知领域");
+                    documentMap.put(chunk.getDocumentId(), defaultDoc);
+                }
+            }
 
             // 模拟相似度（实际从向量数据库获取）
             similarities.add(0.85 + Math.random() * 0.15);
         }
 
-        // 创建答案来源信息
-        String sourceInfo = SourceInfo.createSourceInfo(documents, similarities);
-        String relatedDocumentIds = SourceInfo.createRelatedDocumentIds(documents);
+        // 创建详细的答案来源信息（包含位置溯源）
+        String sourceInfo = SourceInfo.createDetailedSourceInfo(relevantChunks, documentMap, similarities);
+        String relatedDocumentIds = SourceInfo.createRelatedChunkIds(relevantChunks);
 
         Map<String, Object> result = new HashMap<>();
         result.put("chunks", chunkContents);

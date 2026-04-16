@@ -32,8 +32,10 @@ public interface DocumentChunkMapper {
     /**
      * 插入文档切片
      */
-    @Insert("INSERT INTO document_chunk(document_id, chunk_content, chunk_index, vector_id, tags, status, create_time) " +
-            "VALUES(#{documentId}, #{chunkContent}, #{chunkIndex}, #{vectorId}, #{tags}, #{status}, #{createTime})")
+    @Insert("INSERT INTO document_chunk(document_id, chunk_content, chunk_index, vector_id, tags, status, " +
+            "start_position, end_position, page_number, section_title, paragraph_index, line_range, create_time) " +
+            "VALUES(#{documentId}, #{chunkContent}, #{chunkIndex}, #{vectorId}, #{tags}, #{status}, " +
+            "#{startPosition}, #{endPosition}, #{pageNumber}, #{sectionTitle}, #{paragraphIndex}, #{lineRange}, #{createTime})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     int insert(DocumentChunk documentChunk);
 
@@ -46,7 +48,9 @@ public interface DocumentChunkMapper {
      * 更新文档切片
      */
     @Update("UPDATE document_chunk SET chunk_content = #{chunkContent}, vector_id = #{vectorId}, " +
-            "tags = #{tags}, status = #{status} WHERE id = #{id}")
+            "tags = #{tags}, status = #{status}, start_position = #{startPosition}, end_position = #{endPosition}, " +
+            "page_number = #{pageNumber}, section_title = #{sectionTitle}, paragraph_index = #{paragraphIndex}, " +
+            "line_range = #{lineRange} WHERE id = #{id}")
     int update(DocumentChunk documentChunk);
 
     /**
@@ -61,4 +65,4 @@ public interface DocumentChunkMapper {
     @Delete("DELETE FROM document_chunk WHERE document_id = #{documentId}")
     int deleteByDocumentId(Long documentId);
 
-    }
+}

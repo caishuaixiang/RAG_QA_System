@@ -4,18 +4,26 @@
 
     <insert id="batchInsert" parameterType="java.util.List">
         INSERT INTO document_chunk (
-            document_id,
-            chunk_content,
-            chunk_index,
-            vector_id,
-            tags,
-            status,
-            create_time
+        document_id,
+        chunk_content,
+        chunk_index,
+        vector_id,
+        tags,
+        status,
+        start_position,
+        end_position,
+        page_number,
+        section_title,
+        paragraph_index,
+        line_range,
+        create_time
         ) VALUES
         <foreach collection="list" item="item" separator=",">
             (#{item.documentId}, #{item.chunkContent}, #{item.chunkIndex},
-             #{item.vectorId}, #{item.tags}, #{item.status},
-             #{item.createTime})
+            #{item.vectorId}, #{item.tags}, #{item.status},
+            #{item.startPosition}, #{item.endPosition}, #{item.pageNumber},
+            #{item.sectionTitle}, #{item.paragraphIndex}, #{item.lineRange},
+            #{item.createTime})
         </foreach>
     </insert>
 

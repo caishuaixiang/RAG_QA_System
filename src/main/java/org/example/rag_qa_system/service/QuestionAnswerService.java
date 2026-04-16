@@ -16,6 +16,13 @@ public interface QuestionAnswerService {
     void saveQuestionAnswer(QuestionAnswer questionAnswer);
 
     /**
+     * 根据ID获取问答记录
+     * @param id 记录ID
+     * @return 问答记录
+     */
+    QuestionAnswer getQuestionAnswerById(Long id);
+
+    /**
      * 获取问答历史
      * @param userId 用户ID
      * @param limit 限制数量
@@ -36,6 +43,20 @@ public interface QuestionAnswerService {
      * @param id 记录ID
      */
     void deleteQuestionAnswer(Long id);
+
+    /**
+     * 清空用户问答历史
+     * @param userId 用户ID
+     */
+    void clearHistoryByUserId(Long userId);
+
+    /**
+     * 搜索问答记录
+     * @param keyword 关键词
+     * @param userId 用户ID（可选）
+     * @return 问答记录列表
+     */
+    List<QuestionAnswer> searchQuestionAnswer(String keyword, Long userId);
 
     /**
      * 根据状态获取问答记录

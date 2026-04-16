@@ -3,6 +3,7 @@ package org.example.rag_qa_system.service.impl;
 import org.example.rag_qa_system.entity.DocumentChunk;
 import org.example.rag_qa_system.mapper.DocumentChunkMapper;
 import org.example.rag_qa_system.service.DocumentChunkService;
+import org.example.rag_qa_system.utils.TextChunker;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -33,6 +34,54 @@ public class DocumentChunkServiceImpl implements DocumentChunkService {
             chunk.setCreateTime(LocalDateTime.now());
             documentChunkMapper.insert(chunk);
         }
+    }
+
+    @Override
+    public void createChunksWithLocation(Long documentId, List<TextChunker.ChunkResult> chunkResults,
+                                         List<TextChunker.SectionInfo> sections) {
+        // 清除现有切片
+        deleteChunksByDocumentId(documentId);
+
+        // 创建新切片（包含位置信息）
+        for (int i = 0; i < chunkResults.size(); i++) {
+            TextChunker.ChunkResult result = chunkResults.get(i);
+
+            DocumentChunk chunk = new DocumentChunk();
+            chunk.setDocumentId(documentId);
+            chunk.setChunkContent(result.getContent());
+            chunk.setChunkIndex(i);
+            chunk.setStatus(0); // 未处理
+
+            // 设置位置溯源信息
+            chunk.setStartPosition(result.getStartIndex());
+            chunk.setEndPosition(result.getEndIndex());
+            chunk.setParagraphIndex(result.getParagraphIndex());
+            chunk.setLineRange(result.getLineRange());
+
+            // 根据字符位置查找所属章节
+            if (sections != null && !sections.isEmpty()) {
+                String sectionTitle = findSectionTitle(result.getStartIndex(), sections);
+                chunk.setSectionTitle(sectionTitle);
+            }
+
+            chunk.setCreateTime(LocalDateTime.now());
+            documentChunkMapper.insert(chunk);
+        }
+    }
+
+    /**
+     * 根据字符位置查找所属章节标题
+     */
+    private String findSectionTitle(int charIndex, List<TextChunker.SectionInfo> sections) {
+        String currentSection = null;
+        for (TextChunker.SectionInfo section : sections) {
+            if (section.getStartIndex() <= charIndex) {
+                currentSection = section.getTitle();
+            } else {
+                break;
+            }
+        }
+        return currentSection;
     }
 
     @Override

@@ -57,4 +57,17 @@ public interface DocumentService {
      * @param documentId 文档ID
      */
     void processDocument(Long documentId) throws Exception;
+
+    /**
+     * 搜索文档
+     * @param keyword 关键词
+     * @return 文档列表
+     */
+    List<Document> searchDocuments(String keyword);
+
+    /**
+     * 批量删除文档
+     * @param ids 文档ID列表
+     */
+    void batchDeleteDocuments(List<Long> ids);
 }

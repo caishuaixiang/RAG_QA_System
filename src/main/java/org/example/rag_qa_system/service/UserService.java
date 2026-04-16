@@ -42,4 +42,25 @@ public interface UserService {
      * @return 用户列表
      */
     List<User> getAllUsers();
+
+    /**
+     * 更新用户信息
+     * @param user 用户信息
+     */
+    void updateUser(User user);
+
+    /**
+     * 修改密码
+     * @param userId 用户ID
+     * @param oldPassword 旧密码
+     * @param newPassword 新密码
+     * @return 是否成功
+     */
+    boolean changePassword(Long userId, String oldPassword, String newPassword);
+
+    /**
+     * 删除用户
+     * @param userId 用户ID
+     */
+    void deleteUser(Long userId);
 }

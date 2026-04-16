@@ -5,6 +5,7 @@ import org.example.rag_qa_system.entity.User;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Options;
 
 import java.util.List;
@@ -54,4 +55,10 @@ public interface UserMapper {
             "email = #{email}, phone = #{phone}, status = #{status}, update_time = #{updateTime} " +
             "WHERE id = #{id}")
     int update(User user);
+
+    /**
+     * 删除用户
+     */
+    @Delete("DELETE FROM user WHERE id = #{id}")
+    int delete(Long id);
 }

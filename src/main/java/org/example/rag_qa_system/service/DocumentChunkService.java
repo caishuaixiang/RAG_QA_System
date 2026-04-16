@@ -1,6 +1,7 @@
 package org.example.rag_qa_system.service;
 
 import org.example.rag_qa_system.entity.DocumentChunk;
+import org.example.rag_qa_system.utils.TextChunker;
 
 import java.util.List;
 
@@ -10,11 +11,20 @@ import java.util.List;
 public interface DocumentChunkService {
 
     /**
-     * 创建文档切片
+     * 创建文档切片（基础方法，不包含位置信息）
      * @param documentId 文档ID
      * @param chunks 切片列表
      */
     void createChunks(Long documentId, List<String> chunks);
+
+    /**
+     * 创建文档切片（增强方法，包含位置溯源信息）
+     * @param documentId 文档ID
+     * @param chunkResults 切片结果列表（包含位置信息）
+     * @param sections 章节信息列表
+     */
+    void createChunksWithLocation(Long documentId, List<TextChunker.ChunkResult> chunkResults,
+                                  List<TextChunker.SectionInfo> sections);
 
     /**
      * 获取文档切片

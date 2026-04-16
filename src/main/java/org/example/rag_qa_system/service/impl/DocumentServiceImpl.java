@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -54,6 +53,7 @@ public class DocumentServiceImpl implements DocumentService {
         document.setType(fileUtils.getFileType(fileName));
         document.setSize(file.getSize());
         document.setPath(filePath);
+        document.setFilePath(filePath);
         document.setKnowledgeDomain(knowledgeDomain);
         document.setStatus(0); // 未处理
         document.setCreateTime(LocalDateTime.now());
@@ -67,15 +67,12 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     public List<Document> getDocumentList(String knowledgeDomain, Integer status) {
-        if (knowledgeDomain != null && !knowledgeDomain.isEmpty() && status != null) {
-            return documentMapper.findByStatus(status);
-        } else if (knowledgeDomain != null && !knowledgeDomain.isEmpty()) {
-            // 这里需要根据实际需求查询
-            return documentMapper.findByStatus(0);
+        if (knowledgeDomain != null && !knowledgeDomain.isEmpty()) {
+            return documentMapper.findByKnowledgeDomain(knowledgeDomain);
         } else if (status != null) {
             return documentMapper.findByStatus(status);
         } else {
-            return documentMapper.findByUserId(1L); // 需要从上下文获取用户ID
+            return documentMapper.findAll();
         }
     }
 
@@ -103,6 +100,9 @@ public class DocumentServiceImpl implements DocumentService {
         // 删除文档切片
         documentChunkService.deleteChunksByDocumentId(id);
 
+        // 删除向量数据库中的数据
+        vectorDatabaseService.deleteChunksFromVectorDB(id);
+
         // 删除文档记录
         documentMapper.delete(id);
     }
@@ -127,12 +127,31 @@ public class DocumentServiceImpl implements DocumentService {
         document.setUpdateTime(LocalDateTime.now());
         documentMapper.update(document);
 
-        // 文档切片
-        List<String> textChunks = TextChunker.smartSplit(content, 500); // 每个切片最大500字符
-        documentChunkService.createChunks(documentId, textChunks);
+        // 使用增强版智能切片算法（段落感知 + 重叠窗口）
+        List<TextChunker.ChunkResult> chunkResults = TextChunker.smartSplitWithOverlap(content, 500, 50);
+
+        // 提取章节信息
+        List<TextChunker.SectionInfo> sections = TextChunker.extractSections(content);
+
+        // 创建文档切片（包含位置溯源信息）
+        documentChunkService.createChunksWithLocation(documentId, chunkResults, sections);
 
         // 向量化
         List<DocumentChunk> documentChunks = documentChunkService.getChunksByDocumentId(documentId);
         vectorDatabaseService.addChunksToVectorDB(documentId, documentChunks);
+    }
+
+    @Override
+    public List<Document> searchDocuments(String keyword) {
+        return documentMapper.findByCondition(null, null, null, keyword);
+    }
+
+    @Override
+    public void batchDeleteDocuments(List<Long> ids) {
+        if (ids != null && !ids.isEmpty()) {
+            for (Long id : ids) {
+                deleteDocument(id);
+            }
+        }
     }
 }

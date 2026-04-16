@@ -23,6 +23,11 @@ public class Document implements Serializable {
     private Long id;
 
     /**
+     * 用户ID
+     */
+    private Long userId;
+
+    /**
      * 文档名称
      */
     private String name;

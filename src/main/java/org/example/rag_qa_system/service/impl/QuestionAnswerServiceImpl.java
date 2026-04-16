@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 问答服务实现类
@@ -22,12 +23,17 @@ public class QuestionAnswerServiceImpl implements QuestionAnswerService {
     public void saveQuestionAnswer(QuestionAnswer questionAnswer) {
         questionAnswer.setCreateTime(LocalDateTime.now());
         questionAnswer.setUpdateTime(LocalDateTime.now());
+        questionAnswer.setStatus(0);
         questionAnswerMapper.insert(questionAnswer);
     }
 
     @Override
+    public QuestionAnswer getQuestionAnswerById(Long id) {
+        return questionAnswerMapper.findById(id);
+    }
+
+    @Override
     public List<QuestionAnswer> getQuestionAnswerHistory(Long userId, int limit) {
-        // 使用Service方法获取历史记录
         List<QuestionAnswer> allAnswers = questionAnswerMapper.findByUserId(userId);
         if (allAnswers.size() > limit) {
             return allAnswers.subList(0, limit);
@@ -45,7 +51,27 @@ public class QuestionAnswerServiceImpl implements QuestionAnswerService {
         QuestionAnswer questionAnswer = new QuestionAnswer();
         questionAnswer.setId(id);
         questionAnswer.setStatus(1); // 标记为已删除
+        questionAnswer.setUpdateTime(LocalDateTime.now());
         questionAnswerMapper.update(questionAnswer);
+    }
+
+    @Override
+    public void clearHistoryByUserId(Long userId) {
+        questionAnswerMapper.deleteByUserId(userId);
+    }
+
+    @Override
+    public List<QuestionAnswer> searchQuestionAnswer(String keyword, Long userId) {
+        List<QuestionAnswer> results;
+        if (userId != null) {
+            results = questionAnswerMapper.searchByKeywordAndUserId(keyword, userId);
+        } else {
+            results = questionAnswerMapper.searchByKeyword(keyword);
+        }
+        // 过滤已删除的记录
+        return results.stream()
+                .filter(qa -> qa.getStatus() == null || qa.getStatus() == 0)
+                .collect(Collectors.toList());
     }
 
     @Override
