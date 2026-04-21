@@ -1,6 +1,10 @@
 package org.example.rag_qa_system.utils;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.client.HttpClientErrorException;
@@ -24,7 +28,8 @@ public class LLMUtils {
     @Value("${llm.api.type}")
     private String llmApiType;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    @Autowired
+    private RestTemplate restTemplate;
 
     /**
      * 生成回答
@@ -34,6 +39,11 @@ public class LLMUtils {
      */
     public String generateAnswer(String question, String context) {
         try {
+            // 准备请求头
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + llmApiKey);
+
             Map<String, Object> request = new HashMap<>();
 
             switch (llmApiType.toLowerCase()) {
@@ -64,7 +74,7 @@ public class LLMUtils {
                     break;
 
                 case "chatglm":
-                    // ChatGLM API
+                    // ChatGLM API (智谱)
                     request.put("model", getLLMModel());
                     request.put("messages", new Object[]{
                             new HashMap<String, Object>() {{
@@ -88,12 +98,13 @@ public class LLMUtils {
                     });
             }
 
+            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, headers);
+
             Map<String, Object> response = restTemplate.postForObject(
                     llmApiUrl,
-                    request,
+                    requestEntity,
                     Map.class
             );
-
             if (response != null) {
                 switch (llmApiType.toLowerCase()) {
                     case "qwen":
@@ -114,7 +125,10 @@ public class LLMUtils {
                             Object[] choices = (Object[]) response.get("choices");
                             if (choices.length > 0) {
                                 Map<String, Object> choice = (Map<String, Object>) choices[0];
-                                return (String) choice.get("content");
+                                Map<String, Object> message = (Map<String, Object>) choice.get("message");
+                                if (message != null) {
+                                    return (String) message.get("content");
+                                }
                             }
                         }
                         break;
@@ -134,7 +148,7 @@ public class LLMUtils {
         } catch (HttpClientErrorException e) {
             throw new RuntimeException("LLM API error: " + e.getResponseBodyAsString(), e);
         } catch (RestClientException e) {
-            throw new RuntimeException("LLM API request failed", e);
+            throw new RuntimeException("LLM API request failed: " + e.getMessage(), e);
         }
     }
 

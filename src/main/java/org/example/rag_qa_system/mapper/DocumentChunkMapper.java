@@ -65,4 +65,18 @@ public interface DocumentChunkMapper {
     @Delete("DELETE FROM document_chunk WHERE document_id = #{documentId}")
     int deleteByDocumentId(Long documentId);
 
+    /**
+     * 统计切片总数
+     */
+    @Select("SELECT COUNT(*) FROM document_chunk")
+    int count();
+
+    /**
+     * 根据用户ID统计切片数量
+     */
+    @Select("SELECT COUNT(*) FROM document_chunk dc " +
+            "JOIN document d ON dc.document_id = d.id " +
+            "WHERE d.user_id = #{userId}")
+    int countByUserId(Long userId);
+
 }

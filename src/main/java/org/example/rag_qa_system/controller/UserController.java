@@ -1,6 +1,10 @@
 package org.example.rag_qa_system.controller;
 
 import org.example.rag_qa_system.entity.User;
+import org.example.rag_qa_system.mapper.DocumentChunkMapper;
+import org.example.rag_qa_system.mapper.DocumentMapper;
+import org.example.rag_qa_system.mapper.KnowledgeBaseMapper;
+import org.example.rag_qa_system.mapper.QuestionAnswerMapper;
 import org.example.rag_qa_system.service.UserService;
 import org.example.rag_qa_system.utils.Result;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +25,18 @@ public class UserController {
     @Autowired
     private UserService userService;
 
+    @Autowired
+    private KnowledgeBaseMapper knowledgeBaseMapper;
+
+    @Autowired
+    private DocumentMapper documentMapper;
+
+    @Autowired
+    private QuestionAnswerMapper questionAnswerMapper;
+
+    @Autowired
+    private DocumentChunkMapper documentChunkMapper;
+
     // 简单的Token存储（生产环境应使用Redis）
     private static final Map<String, Long> tokenStore = new HashMap<>();
 
@@ -28,8 +44,10 @@ public class UserController {
      * 用户登录
      */
     @PostMapping("/login")
-    public Result login(@RequestParam String username, @RequestParam String password) {
+    public Result login(@RequestBody Map<String, String> loginData) {
         try {
+            String username = loginData.get("username");
+            String password = loginData.get("password");
             User user = userService.login(username, password);
             if (user != null) {
                 // 生成Token
@@ -92,7 +110,8 @@ public class UserController {
     public Result updateUser(@PathVariable Long id, @RequestBody User user) {
         try {
             user.setId(id);
-            // 不允许通过此接口修改密码
+            // 不允许通过此接口修改用户名和密码
+            user.setUsername(null);
             user.setPassword(null);
             userService.updateUser(user);
             User updatedUser = userService.getUserById(id);
@@ -185,5 +204,22 @@ public class UserController {
             token = token.substring(7);
         }
         return tokenStore.get(token);
+    }
+
+    /**
+     * 获取用户统计数据
+     */
+    @GetMapping("/{id}/stats")
+    public Result getUserStats(@PathVariable Long id) {
+        try {
+            Map<String, Object> stats = new HashMap<>();
+            stats.put("knowledgeCount", knowledgeBaseMapper.countByUserId(id));
+            stats.put("documentCount", documentMapper.countByUserId(id));
+            stats.put("qaCount", questionAnswerMapper.countByUserId(id));
+            stats.put("chunkCount", documentChunkMapper.countByUserId(id));
+            return Result.success(stats);
+        } catch (Exception e) {
+            return Result.error("获取统计数据失败: " + e.getMessage());
+        }
     }
 }

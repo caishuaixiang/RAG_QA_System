@@ -49,13 +49,19 @@ public interface UserMapper {
     int insert(User user);
 
     /**
-     * 更新用户
+     * 更新用户（只更新非null字段）
      */
-    @Update("UPDATE user SET username = #{username}, password = #{password}, nickname = #{nickname}, " +
-            "email = #{email}, phone = #{phone}, status = #{status}, update_time = #{updateTime} " +
-            "WHERE id = #{id}")
+    @Update("<script>" +
+            "UPDATE user SET " +
+            "<if test='nickname != null'>nickname = #{nickname}, </if>" +
+            "<if test='email != null'>email = #{email}, </if>" +
+            "<if test='phone != null'>phone = #{phone}, </if>" +
+            "<if test='password != null and password != \"\"'>password = #{password}, </if>" +
+            "<if test='status != null'>status = #{status}, </if>" +
+            "update_time = NOW() " +
+            "WHERE id = #{id}" +
+            "</script>")
     int update(User user);
-
     /**
      * 删除用户
      */

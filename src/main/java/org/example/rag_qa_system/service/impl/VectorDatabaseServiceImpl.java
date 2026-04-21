@@ -6,16 +6,16 @@ import org.example.rag_qa_system.service.VectorDatabaseService;
 import org.example.rag_qa_system.utils.VectorUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
- * 向量数据库服务实现类
+ * 向量数据库服务实现类 (ChromaDB)
  */
 @Service("vectorDatabaseServiceImpl")
 public class VectorDatabaseServiceImpl implements VectorDatabaseService {
@@ -26,74 +26,223 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
     @Autowired
     private DocumentChunkService documentChunkService;
 
+    @Autowired
+    private RestTemplate restTemplate;
+
     @Value("${vector.db.url}")
     private String vectorDbUrl;
 
     @Value("${vector.db.collection}")
     private String vectorDbCollection;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    // 缓存 collection ID
+    private String collectionId = null;
+
+    /**
+     * 获取或创建 collection
+     */
+    private String getOrCreateCollectionId() {
+        if (collectionId != null) {
+            return collectionId;
+        }
+
+        try {
+            // 先尝试获取已存在的 collection
+            String getUrl = vectorDbUrl + "/api/v1/collections/" + vectorDbCollection;
+            Map<String, Object> existingCollection = restTemplate.getForObject(getUrl, Map.class);
+
+            if (existingCollection != null && existingCollection.containsKey("id")) {
+                collectionId = (String) existingCollection.get("id");
+                System.out.println("Found existing collection: " + collectionId);
+                return collectionId;
+            }
+        } catch (Exception e) {
+            System.out.println("Collection not found, creating new one...");
+        }
+
+        // 创建新的 collection
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            Map<String, Object> request = new HashMap<>();
+            request.put("name", vectorDbCollection);
+
+            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, headers);
+
+            Map<String, Object> response = restTemplate.postForObject(
+                    vectorDbUrl + "/api/v1/collections",
+                    requestEntity,
+                    Map.class
+            );
+
+            if (response != null && response.containsKey("id")) {
+                collectionId = (String) response.get("id");
+                System.out.println("Created new collection: " + collectionId);
+                return collectionId;
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to create collection: " + e.getMessage());
+        }
+
+        return null;
+    }
 
     @Override
     public void addChunksToVectorDB(Long documentId, List<DocumentChunk> chunks) {
+        String collId = getOrCreateCollectionId();
+        if (collId == null) {
+            System.err.println("Failed to get collection ID");
+            return;
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        List<String> ids = new ArrayList<>();
+        List<float[]> embeddings = new ArrayList<>();
+        List<Map<String, Object>> metadatas = new ArrayList<>();
+        List<String> documents = new ArrayList<>();
+
         for (DocumentChunk chunk : chunks) {
             // 获取向量
             float[] vector = vectorUtils.getVector(chunk.getChunkContent());
 
-            // 准备数据
-            Map<String, Object> data = new HashMap<>();
-            data.put("id", documentId + "_" + chunk.getChunkIndex());
-            data.put("document_id", documentId);
-            data.put("chunk_index", chunk.getChunkIndex());
-            data.put("content", chunk.getChunkContent());
-            data.put("vector", vector);
+            ids.add(documentId + "_" + chunk.getChunkIndex());
+            embeddings.add(vector);
+            documents.add(chunk.getChunkContent());
 
-            // 添加到向量数据库
+            Map<String, Object> metadata = new HashMap<>();
+            metadata.put("document_id", documentId);
+            metadata.put("chunk_index", chunk.getChunkIndex());
+            metadatas.add(metadata);
+
+            // 更新切片状态
+            chunk.setStatus(1);
+            documentChunkService.updateDocument(chunk);
+        }
+
+        Map<String, Object> request = new HashMap<>();
+        request.put("ids", ids);
+        request.put("embeddings", embeddings);
+        request.put("metadatas", metadatas);
+        request.put("documents", documents);
+
+        System.out.println("Adding " + ids.size() + " chunks to ChromaDB...");
+
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, headers);
+
+        try {
             restTemplate.postForObject(
-                    vectorDbUrl + "/api/collections/" + vectorDbCollection + "/add",
-                    data,
+                    vectorDbUrl + "/api/v1/collections/" + collId + "/add",
+                    requestEntity,
+                    Map.class
+            );
+            System.out.println("Successfully added chunks to ChromaDB");
+        } catch (Exception e) {
+            System.err.println("Failed to add chunks to ChromaDB: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    @Override
+    public List<DocumentChunk> searchSimilarChunks(float[] queryVector, int topK) {
+        System.out.println("=== Vector DB Search ===");
+        System.out.println("URL: " + vectorDbUrl);
+        System.out.println("Collection: " + vectorDbCollection);
+
+        String collId = getOrCreateCollectionId();
+        if (collId == null) {
+            System.err.println("Failed to get collection ID");
+            return new ArrayList<>();
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        // ChromaDB query 格式
+        Map<String, Object> request = new HashMap<>();
+        request.put("query_embeddings", Arrays.asList(queryVector));
+        request.put("n_results", topK);
+
+        System.out.println("Searching in ChromaDB...");
+
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, headers);
+
+        try {
+            Map<String, Object> response = restTemplate.postForObject(
+                    vectorDbUrl + "/api/v1/collections/" + collId + "/query",
+                    requestEntity,
                     Map.class
             );
 
-            // 更新切片状态
-            chunk.setStatus(1); // 已处理
-            documentChunkService.updateDocument(chunk);
-        }
-    }
+            System.out.println("ChromaDB Response: " + response);
 
-    @Override
-    public List<DocumentChunk> searchSimilarChunks(float[] queryVector, int topK) {
-        Map<String, Object> request = new HashMap<>();
-        request.put("vector", queryVector);
-        request.put("top_k", topK);
+            List<DocumentChunk> result = new ArrayList<>();
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> response = restTemplate.postForObject(
-                vectorDbUrl + "/api/collections/" + vectorDbCollection + "/search",
-                request,
-                Map.class
-        );
+            if (response != null) {
+                // ChromaDB 返回格式: {ids: [[...]], documents: [[...]], metadatas: [[...]], distances: [[...]]}
+                List<List<String>> ids = (List<List<String>>) response.get("ids");
+                List<List<String>> documents = (List<List<String>>) response.get("documents");
+                List<List<Map<String, Object>>> metadatas = (List<List<Map<String, Object>>>) response.get("metadatas");
 
-        List<DocumentChunk> result = new ArrayList<>();
-        if (response != null && response.containsKey("results")) {
-            @SuppressWarnings("unchecked")
-            List<Map<String, Object>> results = (List<Map<String, Object>>) response.get("results");
-            for (Map<String, Object> item : results) {
-                DocumentChunk chunk = new DocumentChunk();
-                chunk.setDocumentId(((Number) item.get("document_id")).longValue());
-                chunk.setChunkIndex(((Number) item.get("chunk_index")).intValue());
-                chunk.setChunkContent((String) item.get("content"));
-                result.add(chunk);
+                if (ids != null && !ids.isEmpty() && !ids.get(0).isEmpty()) {
+                    List<String> idList = ids.get(0);
+                    List<String> docList = documents != null && !documents.isEmpty() ? documents.get(0) : new ArrayList<>();
+                    List<Map<String, Object>> metaList = metadatas != null && !metadatas.isEmpty() ? metadatas.get(0) : new ArrayList<>();
+
+                    for (int i = 0; i < idList.size(); i++) {
+                        DocumentChunk chunk = new DocumentChunk();
+                        chunk.setChunkContent(docList.size() > i ? docList.get(i) : "");
+
+                        if (metaList.size() > i) {
+                            Map<String, Object> meta = metaList.get(i);
+                            if (meta.get("document_id") != null) {
+                                chunk.setDocumentId(((Number) meta.get("document_id")).longValue());
+                            }
+                            if (meta.get("chunk_index") != null) {
+                                chunk.setChunkIndex(((Number) meta.get("chunk_index")).intValue());
+                            }
+                        }
+
+                        result.add(chunk);
+                    }
+                }
             }
+
+            System.out.println("Found " + result.size() + " similar chunks");
+            return result;
+
+        } catch (Exception e) {
+            System.err.println("Failed to search ChromaDB: " + e.getMessage());
+            e.printStackTrace();
+            return new ArrayList<>();
         }
-        return result;
     }
 
     @Override
     public void deleteChunksFromVectorDB(Long documentId) {
-        restTemplate.delete(
-                vectorDbUrl + "/api/collections/" + vectorDbCollection + "/delete",
-                documentId
-        );
+        String collId = getOrCreateCollectionId();
+        if (collId == null) {
+            return;
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        Map<String, Object> request = new HashMap<>();
+        request.put("where", Map.of("document_id", documentId));
+
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, headers);
+
+        try {
+            restTemplate.postForObject(
+                    vectorDbUrl + "/api/v1/collections/" + collId + "/delete",
+                    requestEntity,
+                    Map.class
+            );
+            System.out.println("Deleted chunks for document: " + documentId);
+        } catch (Exception e) {
+            System.err.println("Failed to delete chunks: " + e.getMessage());
+        }
     }
 }

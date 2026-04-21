@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: rag-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: rag_qa_system
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_storage:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    restart: unless-stopped
+    command: redis-server --requirepass 123456
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_storage:/data
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: rag-chroma
+    restart: unless-stopped
+    environment:
+      - CHROMA_SERVER_AUTHN_CREDENTIALS=
+      - CHROMA_SERVER_AUTHN_PROVIDER=
+      - ANONYMIZED_TELEMETRY=False
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_storage:/chroma/chroma
+
+volumes:
+  mysql_storage:
+  redis_storage:
+  chroma_storage:

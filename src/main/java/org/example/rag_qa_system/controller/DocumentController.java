@@ -4,6 +4,7 @@ import org.example.rag_qa_system.entity.Document;
 import org.example.rag_qa_system.entity.DocumentChunk;
 import org.example.rag_qa_system.service.DocumentService;
 import org.example.rag_qa_system.service.DocumentChunkService;
+import org.example.rag_qa_system.service.KnowledgeBaseService;
 import org.example.rag_qa_system.utils.Result;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -26,6 +27,9 @@ public class DocumentController {
     @Autowired
     private DocumentChunkService documentChunkService;
 
+    @Autowired
+    private KnowledgeBaseService knowledgeBaseService;
+
     /**
      * 上传文档
      */
@@ -37,6 +41,15 @@ public class DocumentController {
             Document document = documentService.uploadDocument(file, knowledgeDomain);
             if (userId != null) {
                 document.setUserId(userId);
+            }
+            // 更新知识库的文档数量
+            if (knowledgeDomain != null && !knowledgeDomain.isEmpty()) {
+                try {
+                    Long knowledgeBaseId = Long.parseLong(knowledgeDomain);
+                    knowledgeBaseService.updateDocumentCount(knowledgeBaseId);
+                } catch (NumberFormatException e) {
+                    // knowledgeDomain 不是数字，忽略
+                }
             }
             return Result.success(document);
         } catch (Exception e) {
@@ -163,7 +176,21 @@ public class DocumentController {
     @DeleteMapping("/{id}")
     public Result deleteDocument(@PathVariable Long id) {
         try {
+            // 删除前获取文档信息，用于更新知识库文档数量
+            Document document = documentService.getDocumentById(id);
+            String knowledgeDomain = document != null ? document.getKnowledgeDomain() : null;
+
             documentService.deleteDocument(id);
+
+            // 更新知识库的文档数量
+            if (knowledgeDomain != null && !knowledgeDomain.isEmpty()) {
+                try {
+                    Long knowledgeBaseId = Long.parseLong(knowledgeDomain);
+                    knowledgeBaseService.updateDocumentCount(knowledgeBaseId);
+                } catch (NumberFormatException e) {
+                    // knowledgeDomain 不是数字，忽略
+                }
+            }
             return Result.success("删除成功");
         } catch (Exception e) {
             return Result.error("删除失败: " + e.getMessage());
@@ -181,9 +208,27 @@ public class DocumentController {
                 return Result.error("请选择要删除的文档");
             }
 
+            // 收集需要更新的知识库ID
+            java.util.Set<Long> knowledgeBaseIds = new java.util.HashSet<>();
+
             for (Long id : ids) {
+                Document document = documentService.getDocumentById(id);
+                if (document != null && document.getKnowledgeDomain() != null) {
+                    try {
+                        Long knowledgeBaseId = Long.parseLong(document.getKnowledgeDomain());
+                        knowledgeBaseIds.add(knowledgeBaseId);
+                    } catch (NumberFormatException e) {
+                        // 忽略
+                    }
+                }
                 documentService.deleteDocument(id);
             }
+
+            // 更新所有受影响的知识库文档数量
+            for (Long knowledgeBaseId : knowledgeBaseIds) {
+                knowledgeBaseService.updateDocumentCount(knowledgeBaseId);
+            }
+
             return Result.success("批量删除成功");
         } catch (Exception e) {
             return Result.error("批量删除失败: " + e.getMessage());

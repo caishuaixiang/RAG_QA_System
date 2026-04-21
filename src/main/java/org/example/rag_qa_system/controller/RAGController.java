@@ -55,6 +55,11 @@ public class RAGController {
     @PostMapping("/ask")
     public Result askQuestion(@RequestParam String question,
                               @RequestParam Long userId) {
+        String answer = null;
+        String sourceInfo = null;
+        String relatedDocumentIds = null;
+        String errorMessage = null;
+
         try {
             // 1. 向量化问题
             float[] questionVector = vectorUtils.getVector(question);
@@ -62,23 +67,14 @@ public class RAGController {
             // 2. 检索相关文档切片
             Map<String, Object> searchResult = searchRelevantChunks(questionVector);
             List<String> relevantChunks = (List<String>) searchResult.get("chunks");
-            String sourceInfo = (String) searchResult.get("sourceInfo");
-            String relatedDocumentIds = (String) searchResult.get("relatedDocumentIds");
+            sourceInfo = (String) searchResult.get("sourceInfo");
+            relatedDocumentIds = (String) searchResult.get("relatedDocumentIds");
 
             // 3. 生成回答
             String context = String.join("\n", relevantChunks);
-            String answer = llmUtils.generateAnswer(question, context);
+            answer = llmUtils.generateAnswer(question, context);
 
-            // 4. 保存问答记录
-            QuestionAnswer qa = new QuestionAnswer();
-            qa.setUserId(userId);
-            qa.setQuestion(question);
-            qa.setAnswer(answer);
-            qa.setVectorIds(relatedDocumentIds);
-            qa.setSource(sourceInfo);
-            questionAnswerService.saveQuestionAnswer(qa);
-
-            // 5. 构建返回结果（包含答案和溯源信息）
+            // 4. 构建返回结果（包含答案和溯源信息）
             Map<String, Object> responseData = new HashMap<>();
             responseData.put("answer", answer);
             responseData.put("sources", SourceInfo.parseSourceInfo(sourceInfo));
@@ -87,6 +83,20 @@ public class RAGController {
             return Result.success(responseData);
         } catch (Exception e) {
             return Result.error("问答失败: " + e.getMessage());
+        } finally {
+            // 无论成功失败都保存问答记录
+            try {
+                // 保存问答记录
+                QuestionAnswer qa = new QuestionAnswer();
+                qa.setUserId(userId);
+                qa.setQuestion(question);
+                qa.setAnswer(answer != null ? answer : "问答失败: " + errorMessage);
+                qa.setVectorIds(relatedDocumentIds);
+                qa.setSource(sourceInfo);
+                questionAnswerService.saveQuestionAnswer(qa);
+            } catch (Exception saveEx){
+                // 保存失败不影响主流程
+            }
         }
     }
 

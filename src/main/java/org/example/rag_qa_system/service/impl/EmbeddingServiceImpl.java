@@ -29,6 +29,9 @@ public class EmbeddingServiceImpl implements EmbeddingService {
     @Value("${embedding.api.key}")
     private String embeddingApiKey;
 
+    @Value("${embedding.api.model:BAAI/bge-large-zh-v1.5}")
+    private String embeddingModel;
+
     @Override
     public String generateEmbedding(String text) {
         // 准备请求头
@@ -36,9 +39,9 @@ public class EmbeddingServiceImpl implements EmbeddingService {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "Bearer " + embeddingApiKey);
 
-        // 准备请求体
+        // 准备请求体（OpenAI 兼容格式）
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("model", "text-embedding-ada-002");
+        requestBody.put("model", embeddingModel);
         requestBody.put("input", text);
 
         // 发送请求
