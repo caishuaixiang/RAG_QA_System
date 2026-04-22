@@ -108,6 +108,7 @@ public class RAGController {
     private Map<String, Object> searchRelevantChunks(float[] questionVector) {
         // 使用向量数据库检索最相关的3个切片
         List<DocumentChunk> relevantChunks = vectorDatabaseService.searchSimilarChunks(questionVector, 3);
+        System.out.println("Found " + relevantChunks.size() + " relevant chunks from vector DB");
 
         List<String> chunkContents = new ArrayList<>();
         Map<Long, Document> documentMap = new HashMap<>();

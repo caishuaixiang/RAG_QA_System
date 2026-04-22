@@ -138,6 +138,7 @@ public class DocumentServiceImpl implements DocumentService {
 
         // 向量化
         List<DocumentChunk> documentChunks = documentChunkService.getChunksByDocumentId(documentId);
+        System.out.println("Processing document " + documentId + ":" + chunkResults.size() + " chunks created");
         vectorDatabaseService.addChunksToVectorDB(documentId, documentChunks);
     }
 

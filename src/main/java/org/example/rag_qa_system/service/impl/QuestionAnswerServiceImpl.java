@@ -48,11 +48,12 @@ public class QuestionAnswerServiceImpl implements QuestionAnswerService {
 
     @Override
     public void deleteQuestionAnswer(Long id) {
-        QuestionAnswer questionAnswer = new QuestionAnswer();
-        questionAnswer.setId(id);
-        questionAnswer.setStatus(1); // 标记为已删除
-        questionAnswer.setUpdateTime(LocalDateTime.now());
-        questionAnswerMapper.update(questionAnswer);
+        QuestionAnswer questionAnswer = questionAnswerMapper.findById(id);
+        if (questionAnswer != null) {
+            questionAnswer.setStatus(1); // 标记为已删除
+            questionAnswer.setUpdateTime(LocalDateTime.now());
+            questionAnswerMapper.update(questionAnswer);
+        }
     }
 
     @Override

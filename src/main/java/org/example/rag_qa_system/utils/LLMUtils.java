@@ -11,6 +11,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -73,13 +74,33 @@ public class LLMUtils {
                     });
                     break;
 
-                case "chatglm":
-                    // ChatGLM API (智谱)
+                case "openai":
+                    // OpenAI 兼容 API（包括智谱 GLM）
                     request.put("model", getLLMModel());
                     request.put("messages", new Object[]{
                             new HashMap<String, Object>() {{
+                                put("role", "system");
+                                put("content", "你是一个智能助手，请根据提供的信息回答问题。");
+                            }},
+                            new HashMap<String, Object>() {{
                                 put("role", "user");
-                                put("content", "【相关信息】" + context + "\n【问题】" + question + "\n要求：\n1. 只基于上述信息回答，不要编造\n2. 如果信息不足，回答\"暂无相关资料\"\n3. 用简洁中文回答");
+                                put("content", "【相关信息】" + context + "\n\n【问题】" + question + "\n\n要求：\n1. 只基于上述信息回答，不要编造\n2. 如果信息不足，回答\"暂无相关资料\"\n3. 用简洁中文回答");
+                            }}
+                    });
+                    break;
+
+                case "chatglm":
+                    // 智谱 Anthropic 兼容 API 格式
+                    // 使用 x-api-key 而不是 Authorization Bearer
+                    headers.set("x-api-key", llmApiKey);
+                    headers.remove("Authorization");
+                    headers.set("anthropic-version", "2023-06-01");
+                    request.put("model", "claude-3-5-sonnet-20241022");
+                    request.put("max_tokens", 1024);
+                    request.put("messages", new Object[]{
+                            new HashMap<String, Object>() {{
+                                put("role", "user");
+                                put("content", "【相关信息】" + context + "\n\n【问题】" + question + "\n\n要求：\n1. 只基于上述信息回答，不要编造\n2. 如果信息不足，回答\"暂无相关资料\"\n3. 用简洁中文回答");
                             }}
                     });
                     break;
@@ -105,6 +126,8 @@ public class LLMUtils {
                     requestEntity,
                     Map.class
             );
+
+            System.out.println("LLM API Response: " + response);
             if (response != null) {
                 switch (llmApiType.toLowerCase()) {
                     case "qwen":
@@ -120,11 +143,34 @@ public class LLMUtils {
                         }
                         break;
 
-                    case "chatglm":
+                    case "openai":
                         if (response.containsKey("choices")) {
-                            Object[] choices = (Object[]) response.get("choices");
-                            if (choices.length > 0) {
-                                Map<String, Object> choice = (Map<String, Object>) choices[0];
+                            List<?> choices = (List<?>) response.get("choices");
+                            if (choices != null && !choices.isEmpty()) {
+                                Map<String, Object> choice = (Map<String, Object>) choices.get(0);
+                                Map<String, Object> message = (Map<String, Object>) choice.get("message");
+                                if (message != null) {
+                                    return (String) message.get("content");
+                                }
+                            }
+                        }
+                        break;
+
+                    case "chatglm":
+                        if (response.containsKey("content")) {
+                            // Anthropic 格式: {"content": [{"type": "text", "text": "..."}]}
+                            List<?> content = (List<?>) response.get("content");
+                            if (content != null && !content.isEmpty()) {
+                                Map<String, Object> contentItem = (Map<String, Object>) content.get(0);
+                                if ("text".equals(contentItem.get("type"))) {
+                                    return (String) contentItem.get("text");
+                                }
+                            }
+                        } else if (response.containsKey("choices")) {
+                            // OpenAI 兼容格式
+                            List<?> choices = (List<?>) response.get("choices");
+                            if (choices != null && !choices.isEmpty()) {
+                                Map<String, Object> choice = (Map<String, Object>) choices.get(0);
                                 Map<String, Object> message = (Map<String, Object>) choice.get("message");
                                 if (message != null) {
                                     return (String) message.get("content");
@@ -135,9 +181,9 @@ public class LLMUtils {
 
                     default:
                         if (response.containsKey("choices")) {
-                            Object[] choices = (Object[]) response.get("choices");
-                            if (choices.length > 0) {
-                                Map<String, Object> choice = (Map<String, Object>) choices[0];
+                            List<?> choices = (List<?>) response.get("choices");
+                            if (choices != null && !choices.isEmpty()) {
+                                Map<String, Object> choice = (Map<String, Object>) choices.get(0);
                                 Map<String, Object> message = (Map<String, Object>) choice.get("message");
                                 return (String) message.get("content");
                             }
@@ -162,10 +208,12 @@ public class LLMUtils {
                 return "qwen-turbo";
             case "wenxin":
                 return "ERNIE-Bot-turbo";
+            case "openai":
+                return "glm-4-flash";  // 智谱 GLM-4-Flash 模型
             case "chatglm":
-                return "chatglm3";
+                return "claude-3-5-sonnet-20241022";
             default:
-                return "qwen-turbo";
+                return "glm-4-flash";
         }
     }
 }

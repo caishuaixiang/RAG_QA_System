@@ -12,7 +12,7 @@ services:
       - "3307:3306"
     volumes:
       - mysql_storage:/var/lib/mysql
-      - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - ./src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
 
   redis:
@@ -26,12 +26,10 @@ services:
       - redis_storage:/data
 
   chroma:
-    image: chromadb/chroma:latest
+    image: chromadb/chroma:0.4.8
     container_name: rag-chroma
     restart: unless-stopped
     environment:
-      - CHROMA_SERVER_AUTHN_CREDENTIALS=
-      - CHROMA_SERVER_AUTHN_PROVIDER=
       - ANONYMIZED_TELEMETRY=False
     ports:
       - "8000:8000"

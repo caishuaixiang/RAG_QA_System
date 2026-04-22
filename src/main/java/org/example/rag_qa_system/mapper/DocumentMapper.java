@@ -55,7 +55,7 @@ public interface DocumentMapper {
     @Update("UPDATE document SET name = #{name}, original_name = #{originalName}, type = #{type}, " +
             "size = #{size}, path = #{path}, file_path = #{filePath}, knowledge_domain = #{knowledgeDomain}, " +
             "content = #{content}, status = #{status}, process_progress = #{processProgress}, " +
-            "error_message = #{errorMessage}, update_time = #{updateTime} WHERE id = #{id}")
+            "error_message = #{errorMessage}, user_id = #{userId}, update_time = #{updateTime} WHERE id = #{id}")
     int update(Document document);
 
     /**

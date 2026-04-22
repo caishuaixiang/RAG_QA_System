@@ -35,8 +35,24 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
     @Value("${vector.db.collection}")
     private String vectorDbCollection;
 
+    @Value("${vector.db.token:}")
+    private String vectorDbToken;
+
     // 缓存 collection ID
     private String collectionId = null;
+
+    /**
+     * 创建带认证的请求头
+     */
+    private HttpHeaders createHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        if (vectorDbToken != null && !vectorDbToken.isEmpty()) {
+            headers.set("Authorization", "Bearer " + vectorDbToken);
+            headers.set("X-Chroma-Token", vectorDbToken);
+        }
+        return headers;
+    }
 
     /**
      * 获取或创建 collection
@@ -46,43 +62,46 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
             return collectionId;
         }
 
+        // 先尝试获取已存在的 collection
         try {
-            // 先尝试获取已存在的 collection
             String getUrl = vectorDbUrl + "/api/v1/collections/" + vectorDbCollection;
-            Map<String, Object> existingCollection = restTemplate.getForObject(getUrl, Map.class);
+            HttpEntity<Void> requestEntity = new HttpEntity<>(createHeaders());
+            var responseEntity = restTemplate.exchange(
+                    getUrl,
+                    org.springframework.http.HttpMethod.GET,
+                    requestEntity,
+                    Map.class
+            );
+            Map<String, Object> existingCollection = responseEntity.getBody();
 
             if (existingCollection != null && existingCollection.containsKey("id")) {
                 collectionId = (String) existingCollection.get("id");
-                System.out.println("Found existing collection: " + collectionId);
                 return collectionId;
             }
         } catch (Exception e) {
-            System.out.println("Collection not found, creating new one...");
+            // Collection not found, will try to create
         }
 
         // 创建新的 collection
         try {
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-
+            String createUrl = vectorDbUrl + "/api/v1/collections";
             Map<String, Object> request = new HashMap<>();
             request.put("name", vectorDbCollection);
 
-            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, headers);
+            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, createHeaders());
 
             Map<String, Object> response = restTemplate.postForObject(
-                    vectorDbUrl + "/api/v1/collections",
+                    createUrl,
                     requestEntity,
                     Map.class
             );
 
             if (response != null && response.containsKey("id")) {
                 collectionId = (String) response.get("id");
-                System.out.println("Created new collection: " + collectionId);
                 return collectionId;
             }
         } catch (Exception e) {
-            System.err.println("Failed to create collection: " + e.getMessage());
+            System.err.println("Failed to create ChromaDB collection: " + e.getMessage());
         }
 
         return null;
@@ -95,9 +114,6 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
             System.err.println("Failed to get collection ID");
             return;
         }
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
 
         List<String> ids = new ArrayList<>();
         List<float[]> embeddings = new ArrayList<>();
@@ -128,45 +144,40 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
         request.put("metadatas", metadatas);
         request.put("documents", documents);
 
-        System.out.println("Adding " + ids.size() + " chunks to ChromaDB...");
-
-        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, headers);
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, createHeaders());
 
         try {
-            restTemplate.postForObject(
+            // ChromaDB add 返回 Boolean，不是 Map
+            Boolean result = restTemplate.postForObject(
                     vectorDbUrl + "/api/v1/collections/" + collId + "/add",
                     requestEntity,
-                    Map.class
+                    Boolean.class
             );
-            System.out.println("Successfully added chunks to ChromaDB");
+            if (Boolean.TRUE.equals(result)) {
+                System.out.println("Successfully added " + ids.size() + " chunks to ChromaDB");
+            } else {
+                System.err.println("ChromaDB add returned false or null");
+            }
         } catch (Exception e) {
             System.err.println("Failed to add chunks to ChromaDB: " + e.getMessage());
-            e.printStackTrace();
         }
     }
+
     @Override
     public List<DocumentChunk> searchSimilarChunks(float[] queryVector, int topK) {
-        System.out.println("=== Vector DB Search ===");
-        System.out.println("URL: " + vectorDbUrl);
-        System.out.println("Collection: " + vectorDbCollection);
-
         String collId = getOrCreateCollectionId();
         if (collId == null) {
             System.err.println("Failed to get collection ID");
             return new ArrayList<>();
         }
-
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
+        System.out.println("Searching in collection: " + collId + " with topK: " + topK);
 
         // ChromaDB query 格式
         Map<String, Object> request = new HashMap<>();
         request.put("query_embeddings", Arrays.asList(queryVector));
         request.put("n_results", topK);
 
-        System.out.println("Searching in ChromaDB...");
-
-        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, headers);
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, createHeaders());
 
         try {
             Map<String, Object> response = restTemplate.postForObject(
@@ -174,8 +185,7 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
                     requestEntity,
                     Map.class
             );
-
-            System.out.println("ChromaDB Response: " + response);
+            System.out.println("ChromaDB query response: " + response);
 
             List<DocumentChunk> result = new ArrayList<>();
 
@@ -209,16 +219,13 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
                 }
             }
 
-            System.out.println("Found " + result.size() + " similar chunks");
             return result;
 
         } catch (Exception e) {
             System.err.println("Failed to search ChromaDB: " + e.getMessage());
-            e.printStackTrace();
             return new ArrayList<>();
         }
     }
-
     @Override
     public void deleteChunksFromVectorDB(Long documentId) {
         String collId = getOrCreateCollectionId();
@@ -226,21 +233,17 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
             return;
         }
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-
         Map<String, Object> request = new HashMap<>();
         request.put("where", Map.of("document_id", documentId));
 
-        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, headers);
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, createHeaders());
 
         try {
             restTemplate.postForObject(
                     vectorDbUrl + "/api/v1/collections/" + collId + "/delete",
                     requestEntity,
-                    Map.class
+                    Object.class
             );
-            System.out.println("Deleted chunks for document: " + documentId);
         } catch (Exception e) {
             System.err.println("Failed to delete chunks: " + e.getMessage());
         }

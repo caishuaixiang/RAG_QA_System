@@ -39,10 +39,6 @@ public class VectorUtils {
      */
     public float[] getVector(String text) {
         try {
-            System.out.println("=== Embedding API Request ===");
-            System.out.println("URL: " + embeddingApiUrl);
-            System.out.println("Model: " + embeddingModel);
-
             // 准备请求头
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -53,8 +49,6 @@ public class VectorUtils {
             request.put("input", text);
             request.put("model", embeddingModel);
 
-            System.out.println("Request body: " + request);
-
             HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, headers);
 
             Map<String, Object> response = restTemplate.postForObject(
@@ -62,8 +56,6 @@ public class VectorUtils {
                     requestEntity,
                     Map.class
             );
-
-            System.out.println("Response: " + response);
 
             if (response != null && response.containsKey("data")) {
                 List<Map<String, Object>> dataList = (List<Map<String, Object>>) response.get("data");

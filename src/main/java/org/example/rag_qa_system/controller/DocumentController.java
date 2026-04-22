@@ -41,6 +41,7 @@ public class DocumentController {
             Document document = documentService.uploadDocument(file, knowledgeDomain);
             if (userId != null) {
                 document.setUserId(userId);
+                documentService.updateDocument(document);
             }
             // 更新知识库的文档数量
             if (knowledgeDomain != null && !knowledgeDomain.isEmpty()) {
