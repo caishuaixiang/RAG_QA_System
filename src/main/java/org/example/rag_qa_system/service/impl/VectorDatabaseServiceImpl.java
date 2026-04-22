@@ -109,9 +109,17 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
 
     @Override
     public void addChunksToVectorDB(Long documentId, List<DocumentChunk> chunks) {
+        System.out.println("[VectorDB] addChunksToVectorDB called, documentId=" + documentId + ", chunks=" + (chunks != null ? chunks.size() : "null"));
+
         String collId = getOrCreateCollectionId();
         if (collId == null) {
-            System.err.println("Failed to get collection ID");
+            System.err.println("[VectorDB] Failed to get collection ID");
+            return;
+        }
+        System.out.println("[VectorDB] Using collection ID: " + collId);
+
+        if (chunks == null || chunks.isEmpty()) {
+            System.err.println("[VectorDB] No chunks to add");
             return;
         }
 
@@ -120,9 +128,18 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
         List<Map<String, Object>> metadatas = new ArrayList<>();
         List<String> documents = new ArrayList<>();
 
-        for (DocumentChunk chunk : chunks) {
-            // 获取向量
+        for (int i = 0; i < chunks.size(); i++) {
+            DocumentChunk chunk = chunks.get(i);
             float[] vector = vectorUtils.getVector(chunk.getChunkContent());
+
+            if (vector == null) {
+                System.err.println("[VectorDB] Failed to get vector for chunk " + i + ", content length=" + chunk.getChunkContent().length());
+                continue;
+            }
+
+            if (i == 0) {
+                System.out.println("[VectorDB] First vector generated, size=" + vector.length);
+            }
 
             ids.add(documentId + "_" + chunk.getChunkIndex());
             embeddings.add(vector);
@@ -131,12 +148,33 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
             Map<String, Object> metadata = new HashMap<>();
             metadata.put("document_id", documentId);
             metadata.put("chunk_index", chunk.getChunkIndex());
+            // 添加位置溯源信息
+            if (chunk.getSectionTitle() != null && !chunk.getSectionTitle().isEmpty()) {
+                metadata.put("section_title", chunk.getSectionTitle());
+            }
+            if (chunk.getPageNumber() != null) {
+                metadata.put("page_number", chunk.getPageNumber());
+            }
+            if (chunk.getParagraphIndex() != null) {
+                metadata.put("paragraph_index", chunk.getParagraphIndex());
+            }
+            if (chunk.getLineRange() != null && !chunk.getLineRange().isEmpty()) {
+                metadata.put("line_range", chunk.getLineRange());
+            }
+            if (chunk.getStartPosition() != null) {
+                metadata.put("start_position", chunk.getStartPosition());
+            }
+            if (chunk.getEndPosition() != null) {
+                metadata.put("end_position", chunk.getEndPosition());
+            }
             metadatas.add(metadata);
 
             // 更新切片状态
             chunk.setStatus(1);
             documentChunkService.updateDocument(chunk);
         }
+
+        System.out.println("[VectorDB] Prepared " + ids.size() + " chunks to add, embeddings size=" + embeddings.size());
 
         Map<String, Object> request = new HashMap<>();
         request.put("ids", ids);
@@ -146,20 +184,15 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
 
         HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, createHeaders());
 
+        String url = vectorDbUrl + "/api/v1/collections/" + collId + "/add";
+        System.out.println("[VectorDB] Calling ChromaDB add API: " + url);
+
         try {
-            // ChromaDB add 返回 Boolean，不是 Map
-            Boolean result = restTemplate.postForObject(
-                    vectorDbUrl + "/api/v1/collections/" + collId + "/add",
-                    requestEntity,
-                    Boolean.class
-            );
-            if (Boolean.TRUE.equals(result)) {
-                System.out.println("Successfully added " + ids.size() + " chunks to ChromaDB");
-            } else {
-                System.err.println("ChromaDB add returned false or null");
-            }
+            Object result = restTemplate.postForObject(url, requestEntity, Object.class);
+            System.out.println("[VectorDB] ChromaDB add response: " + result);
         } catch (Exception e) {
-            System.err.println("Failed to add chunks to ChromaDB: " + e.getMessage());
+            System.err.println("[VectorDB] Failed to add chunks to ChromaDB: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -211,6 +244,25 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
                             }
                             if (meta.get("chunk_index") != null) {
                                 chunk.setChunkIndex(((Number) meta.get("chunk_index")).intValue());
+                            }
+                            // 读取位置溯源信息
+                            if (meta.get("section_title") != null) {
+                                chunk.setSectionTitle((String) meta.get("section_title"));
+                            }
+                            if (meta.get("page_number") != null) {
+                                chunk.setPageNumber(((Number) meta.get("page_number")).intValue());
+                            }
+                            if (meta.get("paragraph_index") != null) {
+                                chunk.setParagraphIndex(((Number) meta.get("paragraph_index")).intValue());
+                            }
+                            if (meta.get("line_range") != null) {
+                                chunk.setLineRange((String) meta.get("line_range"));
+                            }
+                            if (meta.get("start_position") != null) {
+                                chunk.setStartPosition(((Number) meta.get("start_position")).intValue());
+                            }
+                            if (meta.get("end_position") != null) {
+                                chunk.setEndPosition(((Number) meta.get("end_position")).intValue());
                             }
                         }
 

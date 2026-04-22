@@ -13,6 +13,7 @@ import org.example.rag_qa_system.utils.SourceInfo;
 import org.example.rag_qa_system.utils.VectorUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -45,6 +46,9 @@ public class RAGController {
     @Autowired
     @Qualifier("vectorDatabaseServiceImpl")
     private VectorDatabaseService vectorDatabaseService;
+
+    @Value("${rag.search.topK:5}")
+    private int defaultTopK;
 
     /**
      * 问答
@@ -106,8 +110,8 @@ public class RAGController {
      * @return 相关文档切片及其来源信息
      */
     private Map<String, Object> searchRelevantChunks(float[] questionVector) {
-        // 使用向量数据库检索最相关的3个切片
-        List<DocumentChunk> relevantChunks = vectorDatabaseService.searchSimilarChunks(questionVector, 3);
+        // 使用向量数据库检索最相关的切片（数量由配置决定）
+        List<DocumentChunk> relevantChunks = vectorDatabaseService.searchSimilarChunks(questionVector, defaultTopK);
         System.out.println("Found " + relevantChunks.size() + " relevant chunks from vector DB");
 
         List<String> chunkContents = new ArrayList<>();
