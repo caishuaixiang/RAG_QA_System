@@ -26,13 +26,11 @@ services:
       - redis_storage:/data
 
   chroma:
-    image: chromadb/chroma:0.4.8
+    image: chromadb/chroma:0.5.0
     container_name: rag-chroma
     restart: unless-stopped
-    environment:
-      - ANONYMIZED_TELEMETRY=False
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - chroma_storage:/chroma/chroma
 
