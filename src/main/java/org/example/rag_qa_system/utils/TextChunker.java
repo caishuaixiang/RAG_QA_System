@@ -482,6 +482,7 @@ public class TextChunker {
         }
         return end;
     }
+
     /**
      * 提取章节标题（基于常见的章节模式）
      * @param text 文档文本
@@ -499,8 +500,11 @@ public class TextChunker {
                         "|(Chapter\\s+\\d+[^\\n]*)" +                                 // 英文Chapter
                         "|(Section\\s+\\d+[^\\n]*)" +                                 // 英文Section
                         "|(#[^\\n]+)" +                                               // Markdown标题
-                        "|(={3,}|-{3,}|~{3,})",                                       // Markdown分隔线
-                Pattern.CASE_INSENSITIVE
+                        "|(={3,}|-{3,}|~{3,})" +                                       // Markdown分隔线
+                        "|([A-Za-z\u4e00-\u9fa5][A-Za-z0-9\u4e00-\u9fa5\\s]{5,50})" +  // 独立标题行（中英文，5-50字符）
+                        "|(研究生手册|学生手册|本科生手册|博士生手册)" +               // 常见手册名称
+                        "|([\\(（][^\\n]{5,30}[\\)）])",                               // 括号内的副标题
+                Pattern.CASE_INSENSITIVE | Pattern.MULTILINE
         );
 
         Matcher matcher = sectionPattern.matcher(text);
@@ -511,7 +515,95 @@ public class TextChunker {
             }
         }
 
+        // 额外提取：识别独立成行且长度适中的标题（可能是文档标题或章节标题）
+        extractStandaloneTitles(text, sections);
+
         return sections;
+    }
+
+    /**
+     * 提取独立成行的标题
+     * 识别规则：
+     * 1. 单独一行
+     * 2. 长度在3-50字符之间
+     * 3. 不以标点符号结尾（除顿号、书名号）
+     * 4. 包含关键词或格式特征
+     */
+    private static void extractStandaloneTitles(String text, List<SectionInfo> sections) {
+        String[] lines = text.split("\\r?\\n");
+        int currentPos = 0;
+
+        // 关键词列表（用于识别标题）
+        String[] titleKeywords = {
+                "制度", "规定", "办法", "条例", "守则", "手册", "指南", "须知",
+                "章程", "细则", "意见", "通知", "决定", "方案", "措施",
+                "第一章", "第二章", "第三章", "第四章", "第五章", "第六章", "第七章", "第八章", "第九章", "第十章",
+                "第一节", "第二节", "第三节", "第四节", "第五节",
+                "附件", "附录", "附则"
+        };
+
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+            int lineStart = text.indexOf(trimmedLine, currentPos);
+
+            // 检查是否是独立标题行
+            if (isStandaloneTitle(trimmedLine, titleKeywords)) {
+                // 检查是否已经存在相近位置的章节
+                boolean exists = false;
+                for (SectionInfo section : sections) {
+                    if (Math.abs(section.getStartIndex() - lineStart) < 50) {
+                        exists = true;
+                        break;
+                    }
+                }
+                if (!exists) {
+                    sections.add(new SectionInfo(trimmedLine, lineStart));
+                }
+            }
+
+            currentPos = lineStart + line.length();
+        }
+    }
+
+    /**
+     * 判断是否是独立标题行
+     */
+    private static boolean isStandaloneTitle(String line, String[] titleKeywords) {
+        if (line == null || line.isEmpty()) {
+            return false;
+        }
+
+        // 长度限制
+        if (line.length() < 3 || line.length() > 50) {
+            return false;
+        }
+
+        // 不以标点符号结尾（除顿号、书名号）
+        char lastChar = line.charAt(line.length() - 1);
+        if ("。！？，；：、.!?,:;".indexOf(lastChar) >= 0) {
+            return false;
+        }
+
+        // 检查关键词
+        for (String keyword : titleKeywords) {
+            if (line.contains(keyword)) {
+                return true;
+            }
+        }
+
+        // 检查是否是数字编号开头（如"1."、"一、"）
+        if (line.matches("^[一二三四五六七八九十]+、.*") ||
+                line.matches("^\\d+[\\.、．].*") ||
+                line.matches("^第[一二三四五六七八九十百千万零\\d]+[章节篇部].*")) {
+            return true;
+        }
+
+        // 检查是否是手册名称格式（如"西安科技大学研究生请假制度"）
+        if (line.matches(".*[大学学院学校].*[制度规定办法条例守则手册指南].*")) {
+            return true;
+        }
+
+        return false;
     }
 
     /**

@@ -14,21 +14,21 @@ public interface ConversationMessageMapper {
     /**
      * 插入消息
      */
-    @Insert("INSERT INTO conversation_message (conversation_id, role, content, create_time) " +
-            "VALUES (#{conversationId}, #{role}, #{content}, #{createTime})")
+    @Insert("INSERT INTO conversation_message (conversation_id, role, content, sources, create_time) " +
+            "VALUES (#{conversationId}, #{role}, #{content}, #{sources}, #{createTime})")
     @Options(useGeneratedKeys = true, keyProperty = "id")
     void insert(ConversationMessage message);
 
     /**
      * 根据会话ID查询消息列表
      */
-    @Select("SELECT * FROM conversation_message WHERE conversation_id = #{conversationId} ORDER BY create_time ASC")
+    @Select("SELECT id, conversation_id, role, content, sources, create_time FROM conversation_message WHERE conversation_id = #{conversationId} ORDER BY create_time ASC")
     List<ConversationMessage> findByConversationId(@Param("conversationId") String conversationId);
 
     /**
      * 根据会话ID查询最近N条消息
      */
-    @Select("SELECT * FROM conversation_message WHERE conversation_id = #{conversationId} " +
+    @Select("SELECT id, conversation_id, role, content, sources, create_time FROM conversation_message WHERE conversation_id = #{conversationId} " +
             "ORDER BY create_time DESC LIMIT #{limit}")
     List<ConversationMessage> findRecentByConversationId(@Param("conversationId") String conversationId,
                                                          @Param("limit") int limit);

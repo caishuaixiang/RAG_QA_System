@@ -67,7 +67,11 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="knowledgeDomain" label="知识库" width="150" />
+                <el-table-column prop="knowledgeDomain" label="知识库" width="150">
+          <template #default="{ row }">
+            {{ getKnowledgeName(row.knowledgeDomain) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="type" label="类型" width="80">
           <template #default="{ row }">
             <el-tag size="small">{{ row.type?.toUpperCase() }}</el-tag>
@@ -206,6 +210,13 @@ const loadKnowledgeList = async () => {
   } catch (error) {
     console.error('加载知识库列表失败', error)
   }
+}
+
+// 根据知识库ID获取名称
+const getKnowledgeName = (knowledgeDomain) => {
+  if (!knowledgeDomain) return '未分类'
+  const knowledge = knowledgeList.value.find(item => String(item.id) === String(knowledgeDomain))
+  return knowledge ? knowledge.name : knowledgeDomain
 }
 
 const loadDocuments = async () => {

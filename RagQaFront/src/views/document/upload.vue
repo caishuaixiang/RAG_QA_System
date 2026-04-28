@@ -44,7 +44,7 @@
             <template #tip>
               <div class="el-upload__tip">
                 支持的文件格式：PDF、Word、Excel、PPT、TXT、Markdown等<br>
-                单个文件大小不超过50MB，一次最多上传10个文件
+                单个文件大小不超过100MB，一次最多上传10个文件
               </div>
             </template>
           </el-upload>
@@ -109,8 +109,8 @@ const loadKnowledgeList = async () => {
 }
 
 const handleFileChange = (file, files) => {
-  if (file.size / 1024 / 1024 > 50) {
-    ElMessage.error(`文件 ${file.name} 大小超过50MB`)
+  if (file.size / 1024 / 1024 > 100) {
+    ElMessage.error(`文件 ${file.name} 大小超过100MB`)
     return false
   }
   if (files.length > 10) {

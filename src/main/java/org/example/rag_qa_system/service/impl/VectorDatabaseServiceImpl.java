@@ -1,5 +1,6 @@
 package org.example.rag_qa_system.service.impl;
 
+import org.example.rag_qa_system.dto.SearchResult;
 import org.example.rag_qa_system.entity.DocumentChunk;
 import org.example.rag_qa_system.service.DocumentChunkService;
 import org.example.rag_qa_system.service.VectorDatabaseService;
@@ -278,6 +279,94 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
             return new ArrayList<>();
         }
     }
+
+    @Override
+    public List<SearchResult> searchSimilarChunksWithDistance(float[] queryVector, int topK) {
+        String collId = getOrCreateCollectionId();
+        if (collId == null) {
+            System.err.println("Failed to get collection ID");
+            return new ArrayList<>();
+        }
+        System.out.println("Searching in collection: " + collId + " with topK: " + topK);
+
+        // ChromaDB query 格式
+        Map<String, Object> request = new HashMap<>();
+        request.put("query_embeddings", Arrays.asList(queryVector));
+        request.put("n_results", topK);
+
+        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, createHeaders());
+
+        try {
+            Map<String, Object> response = restTemplate.postForObject(
+                    vectorDbUrl + "/api/v1/collections/" + collId + "/query",
+                    requestEntity,
+                    Map.class
+            );
+            System.out.println("ChromaDB query response: " + response);
+
+            List<SearchResult> result = new ArrayList<>();
+
+            if (response != null) {
+                // ChromaDB 返回格式: {ids: [[...]], documents: [[...]], metadatas: [[...]], distances: [[...]]}
+                List<List<String>> ids = (List<List<String>>) response.get("ids");
+                List<List<String>> documents = (List<List<String>>) response.get("documents");
+                List<List<Map<String, Object>>> metadatas = (List<List<Map<String, Object>>>) response.get("metadatas");
+                List<List<Double>> distances = (List<List<Double>>) response.get("distances");
+
+                if (ids != null && !ids.isEmpty() && !ids.get(0).isEmpty()) {
+                    List<String> idList = ids.get(0);
+                    List<String> docList = documents != null && !documents.isEmpty() ? documents.get(0) : new ArrayList<>();
+                    List<Map<String, Object>> metaList = metadatas != null && !metadatas.isEmpty() ? metadatas.get(0) : new ArrayList<>();
+                    List<Double> distanceList = distances != null && !distances.isEmpty() ? distances.get(0) : new ArrayList<>();
+
+                    for (int i = 0; i < idList.size(); i++) {
+                        DocumentChunk chunk = new DocumentChunk();
+                        chunk.setChunkContent(docList.size() > i ? docList.get(i) : "");
+
+                        if (metaList.size() > i) {
+                            Map<String, Object> meta = metaList.get(i);
+                            if (meta.get("document_id") != null) {
+                                chunk.setDocumentId(((Number) meta.get("document_id")).longValue());
+                            }
+                            if (meta.get("chunk_index") != null) {
+                                chunk.setChunkIndex(((Number) meta.get("chunk_index")).intValue());
+                            }
+                            // 读取位置溯源信息
+                            if (meta.get("section_title") != null) {
+                                chunk.setSectionTitle((String) meta.get("section_title"));
+                            }
+                            if (meta.get("page_number") != null) {
+                                chunk.setPageNumber(((Number) meta.get("page_number")).intValue());
+                            }
+                            if (meta.get("paragraph_index") != null) {
+                                chunk.setParagraphIndex(((Number) meta.get("paragraph_index")).intValue());
+                            }
+                            if (meta.get("line_range") != null) {
+                                chunk.setLineRange((String) meta.get("line_range"));
+                            }
+                            if (meta.get("start_position") != null) {
+                                chunk.setStartPosition(((Number) meta.get("start_position")).intValue());
+                            }
+                            if (meta.get("end_position") != null) {
+                                chunk.setEndPosition(((Number) meta.get("end_position")).intValue());
+                            }
+                        }
+
+                        // 获取真实距离值
+                        double distance = distanceList.size() > i ? distanceList.get(i) : 1.0;
+                        result.add(new SearchResult(chunk, distance));
+                    }
+                }
+            }
+
+            return result;
+
+        } catch (Exception e) {
+            System.err.println("Failed to search ChromaDB: " + e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
     @Override
     public void deleteChunksFromVectorDB(Long documentId) {
         String collId = getOrCreateCollectionId();

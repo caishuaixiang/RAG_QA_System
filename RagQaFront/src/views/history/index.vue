@@ -94,9 +94,13 @@ onMounted(() => {
 })
 
 const loadHistory = async () => {
+  if (!userStore.userInfo?.id) {
+    console.warn('用户未登录，无法加载历史记录')
+    return
+  }
   loading.value = true
   try {
-    const res = await qaApi.getHistory({ ...pagination, userId: userStore.userInfo?.id })
+    const res = await qaApi.getHistory({ ...pagination, userId: userStore.userInfo.id })
     if (res.code === 200) {
       historyList.value = res.data?.list || []
       total.value = res.data?.total || 0
@@ -128,13 +132,17 @@ const deleteHistory = async (row) => {
 }
 
 const clearAllHistory = async () => {
+  if (!userStore.userInfo?.id) {
+    ElMessage.error('请先登录')
+    return
+  }
   try {
     await ElMessageBox.confirm('确定要清空所有问答历史吗？', '提示', {
       confirmButtonText: '确定',
       cancelButtonText: '取消',
       type: 'warning'
     })
-    const res = await qaApi.clearHistory(userStore.userInfo?.id)
+    const res = await qaApi.clearHistory(userStore.userInfo.id)
     if (res.code === 200) {
       ElMessage.success('清空成功')
       historyList.value = []

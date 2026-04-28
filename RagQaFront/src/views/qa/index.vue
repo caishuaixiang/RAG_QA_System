@@ -43,9 +43,13 @@
                     >
                       <div class="source-name">{{ source.document_name }}</div>
                       <div class="source-location" v-if="source.location">
-                        <span v-if="source.location.page_number">第{{ source.location.page_number }}页</span>
-                        <span v-if="source.location.section_title"> / {{ source.location.section_title }}</span>
-                        <span v-if="source.location.line_range"> / 第{{ source.location.line_range }}行</span>
+                        <template v-if="getSourceTitle(source)">
+                          <span class="source-title">{{ getSourceTitle(source) }}</span>
+                        </template>
+                        <template v-else>
+                          <span v-if="source.location.page_number">第{{ source.location.page_number }}页</span>
+                          <span v-if="source.location.line_range"> / 第{{ source.location.line_range }}行</span>
+                        </template>
                       </div>
                       <div class="source-similarity">
                         相关度：{{ source.similarity }}%
@@ -203,8 +207,12 @@ const loadKnowledgeList = async () => {
 }
 
 const loadConversations = async () => {
+  if (!userStore.userInfo?.id) {
+    console.warn('用户未登录，无法加载会话列表')
+    return
+  }
   try {
-    const res = await qaApi.getConversations(userStore.userInfo?.id)
+    const res = await qaApi.getConversations(userStore.userInfo.id)
     if (res.code === 200) {
       conversationList.value = res.data || []
     }
@@ -228,12 +236,23 @@ const selectConversation = async (item) => {
     if (res.code === 200) {
       const msgs = res.data || []
       // 将消息转换为显示格式
-      messages.value = msgs.map(msg => ({
-        role: msg.role,
-        content: msg.content,
-        time: formatDateTime(msg.createTime),
-        sources: [] // 历史消息不显示来源
-      }))
+      messages.value = msgs.map(msg => {
+        // 解析sources（仅assistant消息有）
+        let sources = []
+        if (msg.role === 'assistant' && msg.sources) {
+          try {
+            sources = typeof msg.sources === 'string' ? JSON.parse(msg.sources) : msg.sources
+          } catch (e) {
+            console.error('解析sources失败', e)
+          }
+        }
+        return {
+          role: msg.role,
+          content: msg.content,
+          time: formatDateTime(msg.createTime),
+          sources: sources
+        }
+      })
       scrollToBottom()
     }
   } catch (error) {
@@ -316,6 +335,11 @@ const clearCurrentConversation = async () => {
 const handleSubmit = async () => {
   if (!question.value.trim() || loading.value) return
 
+  if (!userStore.userInfo?.id) {
+    ElMessage.error('请先登录')
+    return
+  }
+
   const userQuestion = question.value.trim()
   question.value = ''
 
@@ -332,7 +356,7 @@ const handleSubmit = async () => {
   try {
     const res = await qaApi.chat({
       question: userQuestion,
-      userId: userStore.userInfo?.id,
+      userId: userStore.userInfo.id,
       conversationId: currentConversationId.value
     })
 
@@ -409,6 +433,49 @@ const formatDateTime = (dateStr) => {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+// 获取来源标题（优先显示有意义的标题）
+const getSourceTitle = (source) => {
+  if (!source || !source.location) return ''
+
+  const sectionTitle = source.location.section_title
+  const pageNumber = source.location.page_number
+  const lineRange = source.location.line_range
+
+  // 判断章节标题是否有效（不是太长的句子，且包含关键词）
+  const isValidTitle = (title) => {
+    if (!title || title.length > 50) return false
+    // 包含这些关键词的标题更可能是有效标题
+    const keywords = ['制度', '规定', '办法', '条例', '守则', '手册', '指南', '章', '节', '条', '附录', '附则']
+    return keywords.some(kw => title.includes(kw))
+  }
+
+  // 构建位置信息
+  let locationInfo = ''
+
+  // 优先显示页码
+  if (pageNumber) {
+    locationInfo = `第${pageNumber}页`
+  } else if (lineRange) {
+    // 没有页码时显示行号
+    locationInfo = `第${lineRange}行`
+  }
+
+  // 如果有有效的章节标题
+  if (isValidTitle(sectionTitle)) {
+    if (locationInfo) {
+      return `${locationInfo} ${sectionTitle}`
+    }
+    return sectionTitle
+  }
+
+  // 如果只有位置信息
+  if (locationInfo) {
+    return locationInfo
+  }
+
+  return ''
 }
 </script>
 
@@ -546,6 +613,11 @@ const formatDateTime = (dateStr) => {
                 font-size: 12px;
                 color: #909399;
                 margin-top: 4px;
+              }
+
+              .source-title {
+                  color: #409eff;
+                  font-weight: 500;
               }
 
               .source-similarity {

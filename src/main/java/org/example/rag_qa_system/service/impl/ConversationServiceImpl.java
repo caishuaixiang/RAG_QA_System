@@ -67,10 +67,16 @@ public class ConversationServiceImpl implements ConversationService {
 
     @Override
     public ConversationMessage addMessage(String conversationId, String role, String content) {
+        return addMessage(conversationId, role, content, null);
+    }
+
+    @Override
+    public ConversationMessage addMessage(String conversationId, String role, String content, String sources) {
         ConversationMessage message = new ConversationMessage();
         message.setConversationId(conversationId);
         message.setRole(role);
         message.setContent(content);
+        message.setSources(sources);
         message.setCreateTime(LocalDateTime.now());
         messageMapper.insert(message);
 

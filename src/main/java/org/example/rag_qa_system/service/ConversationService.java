@@ -53,6 +53,16 @@ public interface ConversationService {
     ConversationMessage addMessage(String conversationId, String role, String content);
 
     /**
+     * 添加消息到会话（带来源信息）
+     * @param conversationId 会话ID
+     * @param role 角色（user/assistant）
+     * @param content 消息内容
+     * @param sources 答案来源信息（JSON格式）
+     * @return 消息对象
+     */
+    ConversationMessage addMessage(String conversationId, String role, String content, String sources);
+
+    /**
      * 获取会话的消息历史
      * @param conversationId 会话ID
      * @return 消息列表

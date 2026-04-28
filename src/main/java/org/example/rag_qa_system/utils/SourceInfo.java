@@ -77,7 +77,7 @@ public class SourceInfo {
             source.put("document_name", doc != null ? doc.getName() : "未知文档");
             source.put("knowledge_domain", doc != null ? doc.getKnowledgeDomain() : "未知领域");
             source.put("chunk_index", chunk.getChunkIndex());
-            source.put("similarity", Math.round(similarity * 10000.0) / 100.0);  // 保留两位小数，百分比形式
+            source.put("similarity", Math.round(similarity * 100.0) / 100.0);  // 保留两位小数，百分比形式
 
             // 位置溯源信息
             Map<String, Object> location = new HashMap<>();
@@ -94,9 +94,10 @@ public class SourceInfo {
                 location.put("page_number", chunk.getPageNumber());
             }
 
-            // 章节标题
-            if (chunk.getSectionTitle() != null && !chunk.getSectionTitle().isEmpty()) {
-                location.put("section_title", chunk.getSectionTitle());
+            // 章节标题 - 优先使用有效的标题
+            String sectionTitle = extractValidTitle(chunk.getSectionTitle(), chunk.getChunkContent());
+            if (sectionTitle != null && !sectionTitle.isEmpty()) {
+                location.put("section_title", sectionTitle);
             }
 
             // 段落序号
@@ -127,6 +128,116 @@ public class SourceInfo {
         } catch (Exception e) {
             return "[]";
         }
+    }
+
+    /**
+     * 提取有效的标题
+     * 优先级：1. 有效的章节标题 2. 从内容中提取的标题 3. null
+     */
+    private static String extractValidTitle(String sectionTitle, String content) {
+        // 如果章节标题有效，直接使用
+        if (isValidTitle(sectionTitle)) {
+            return sectionTitle;
+        }
+
+        // 尝试从内容中提取标题
+        if (content != null && !content.isEmpty()) {
+            String extractedTitle = extractTitleFromContent(content);
+            if (extractedTitle != null) {
+                return extractedTitle;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 判断标题是否有效
+     */
+    private static boolean isValidTitle(String title) {
+        if (title == null || title.isEmpty()) {
+            return false;
+        }
+
+        // 标题长度限制（太长不是标题）
+        if (title.length() > 50) {
+            return false;
+        }
+
+        // 标题不应以标点符号结尾（除顿号、书名号）
+        char lastChar = title.charAt(title.length() - 1);
+        if ("。！？，；：、.!?,:;".indexOf(lastChar) >= 0) {
+            return false;
+        }
+
+        // 包含这些关键词的更可能是有效标题
+        String[] keywords = {
+                "制度", "规定", "办法", "条例", "守则", "手册", "指南", "须知",
+                "章程", "细则", "意见", "通知", "决定", "方案", "措施",
+                "第一章", "第二章", "第三章", "第四章", "第五章", "第六章", "第七章", "第八章", "第九章", "第十章",
+                "第一节", "第二节", "第三节", "第四节", "第五节",
+                "附件", "附录", "附则", "条", "款"
+        };
+
+        for (String keyword : keywords) {
+            if (title.contains(keyword)) {
+                return true;
+            }
+        }
+
+        // 数字编号开头（如"1."、"一、"）
+        if (title.matches("^[一二三四五六七八九十]+、.*") ||
+                title.matches("^\\d+[\\.、．].*") ||
+                title.matches("^第[一二三四五六七八九十百千万零\\d]+[章节篇部].*")) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * 从内容中提取标题
+     */
+    private static String extractTitleFromContent(String content) {
+        if (content == null || content.isEmpty()) {
+            return null;
+        }
+
+        // 尝试匹配常见的标题模式
+        String[] lines = content.split("\\r?\\n");
+
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+
+            // 跳过空行和太短的行
+            if (trimmedLine.isEmpty() || trimmedLine.length() < 5) {
+                continue;
+            }
+
+            // 检查是否是手册名称格式（如"西安科技大学研究生请假制度"）
+            if (trimmedLine.matches(".*[大学学院学校].*[制度规定办法条例守则手册指南].*")) {
+                // 确保不是太长
+                if (trimmedLine.length() <= 50) {
+                    return trimmedLine;
+                }
+            }
+
+            // 检查是否包含年份的标题（如"（2017年8月修订）"）
+            if (trimmedLine.matches(".*[（(].*[0-9]{4}.*年.*[修订发布施行].*[）)].*")) {
+                // 继续查找上一行作为主标题
+                continue;
+            }
+
+            // 检查是否以关键词结尾
+            String[] endKeywords = {"制度", "规定", "办法", "条例", "守则", "手册", "指南", "须知"};
+            for (String keyword : endKeywords) {
+                if (trimmedLine.endsWith(keyword) && trimmedLine.length() <= 50) {
+                    return trimmedLine;
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

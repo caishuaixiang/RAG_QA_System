@@ -42,6 +42,11 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     public Document uploadDocument(MultipartFile file, String knowledgeDomain) throws Exception {
+        return uploadDocument(file, knowledgeDomain, null);
+    }
+
+    @Override
+    public Document uploadDocument(MultipartFile file, String knowledgeDomain, Long userId) throws Exception {
         // 保存文件到本地
         String fileName = file.getOriginalFilename();
         String filePath = fileUtils.saveFile(file);
@@ -55,6 +60,7 @@ public class DocumentServiceImpl implements DocumentService {
         document.setPath(filePath);
         document.setFilePath(filePath);
         document.setKnowledgeDomain(knowledgeDomain);
+        document.setUserId(userId);  // 设置用户ID
         document.setStatus(0); // 未处理
         document.setCreateTime(LocalDateTime.now());
         document.setUpdateTime(LocalDateTime.now());

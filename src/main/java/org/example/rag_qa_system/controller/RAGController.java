@@ -1,5 +1,6 @@
 package org.example.rag_qa_system.controller;
 
+import org.example.rag_qa_system.dto.SearchResult;
 import org.example.rag_qa_system.entity.*;
 import org.example.rag_qa_system.service.*;
 import org.example.rag_qa_system.utils.LLMUtils;
@@ -158,7 +159,7 @@ public class RAGController {
 
             // 6. 保存对话消息
             conversationService.addMessage(conversationId, "user", question);
-            conversationService.addMessage(conversationId, "assistant", answer);
+            conversationService.addMessage(conversationId, "assistant", answer,sourceInfo);
 
             // 7. 如果是新会话，用第一个问题作为标题
             if ("新对话".equals(conversation.getTitle()) && question.length() > 0) {
@@ -264,15 +265,18 @@ public class RAGController {
      * @return 相关文档切片及其来源信息
      */
     private Map<String, Object> searchRelevantChunks(float[] questionVector) {
-        // 使用向量数据库检索最相关的切片（数量由配置决定）
-        List<DocumentChunk> relevantChunks = vectorDatabaseService.searchSimilarChunks(questionVector, defaultTopK);
-        System.out.println("Found " + relevantChunks.size() + " relevant chunks from vector DB");
+        // 使用向量数据库检索最相关的切片（数量由配置决定），获取真实距离值
+        List<SearchResult> searchResults = vectorDatabaseService.searchSimilarChunksWithDistance(questionVector, defaultTopK);
+        System.out.println("Found " + searchResults.size() + " relevant chunks from vector DB");
 
         List<String> chunkContents = new ArrayList<>();
         Map<Long, Document> documentMap = new HashMap<>();
         List<Double> similarities = new ArrayList<>();
+        List<DocumentChunk> relevantChunks = new ArrayList<>();
 
-        for (DocumentChunk chunk : relevantChunks) {
+        for (SearchResult searchResult : searchResults) {
+            DocumentChunk chunk = searchResult.getChunk();
+            relevantChunks.add(chunk);
             chunkContents.add(chunk.getChunkContent());
 
             // 获取文档信息
@@ -290,8 +294,8 @@ public class RAGController {
                 }
             }
 
-            // 模拟相似度（实际从向量数据库获取）
-            similarities.add(0.85 + Math.random() * 0.15);
+            // 使用真实距离值计算相似度
+            similarities.add(searchResult.getSimilarityPercentage());
         }
 
         // 创建详细的答案来源信息（包含位置溯源）

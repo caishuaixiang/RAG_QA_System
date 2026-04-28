@@ -38,11 +38,9 @@ public class DocumentController {
                                  @RequestParam("knowledgeDomain") String knowledgeDomain,
                                  @RequestParam(value = "userId", required = false) Long userId) {
         try {
-            Document document = documentService.uploadDocument(file, knowledgeDomain);
-            if (userId != null) {
-                document.setUserId(userId);
-                documentService.updateDocument(document);
-            }
+            // 直接使用带userId参数的方法
+            Document document = documentService.uploadDocument(file, knowledgeDomain, userId);
+
             // 更新知识库的文档数量
             if (knowledgeDomain != null && !knowledgeDomain.isEmpty()) {
                 try {

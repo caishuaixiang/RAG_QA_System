@@ -58,8 +58,12 @@ public class DocumentChunkServiceImpl implements DocumentChunkService {
             chunk.setParagraphIndex(result.getParagraphIndex());
             chunk.setLineRange(result.getLineRange());
 
-            // 根据字符位置查找所属章节
-            if (sections != null && !sections.isEmpty()) {
+            // 优先从切片内容中提取标题
+            String contentTitle = extractTitleFromContent(result.getContent());
+            if (contentTitle != null && !contentTitle.isEmpty()) {
+                chunk.setSectionTitle(contentTitle);
+            } else if (sections != null && !sections.isEmpty()) {
+                // 如果内容中没有标题，则根据字符位置查找所属章节
                 String sectionTitle = findSectionTitle(result.getStartIndex(), sections);
                 chunk.setSectionTitle(sectionTitle);
             }
@@ -71,6 +75,7 @@ public class DocumentChunkServiceImpl implements DocumentChunkService {
 
     /**
      * 根据字符位置查找所属章节标题
+     * 优先级：1. 从切片内容中提取的标题 2. 切片位置之前的章节标题
      */
     private String findSectionTitle(int charIndex, List<TextChunker.SectionInfo> sections) {
         String currentSection = null;
@@ -82,6 +87,55 @@ public class DocumentChunkServiceImpl implements DocumentChunkService {
             }
         }
         return currentSection;
+    }
+
+    /**
+     * 从切片内容中提取有效标题
+     * 优先级高于章节标题
+     */
+    private String extractTitleFromContent(String content) {
+        if (content == null || content.isEmpty()) {
+            return null;
+        }
+
+        String[] lines = content.split("\\r?\\n");
+
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+
+            // 跳过空行和太短的行
+            if (trimmedLine.isEmpty() || trimmedLine.length() < 5 || trimmedLine.length() > 50) {
+                continue;
+            }
+
+            // 不以标点符号结尾（除顿号、书名号）
+            char lastChar = trimmedLine.charAt(trimmedLine.length() - 1);
+            if ("。！？，；：、.!?,:;".indexOf(lastChar) >= 0) {
+                continue;
+            }
+
+            // 检查是否是手册名称格式（如"西安科技大学研究生请假制度"）
+            if (trimmedLine.matches(".*[大学学院学校].*[制度规定办法条例守则手册指南].*")) {
+                return trimmedLine;
+            }
+
+            // 检查是否包含关键词结尾
+            String[] endKeywords = {"制度", "规定", "办法", "条例", "守则", "手册", "指南", "须知"};
+            for (String keyword : endKeywords) {
+                if (trimmedLine.endsWith(keyword)) {
+                    return trimmedLine;
+                }
+            }
+
+            // 检查是否是章节标题格式
+            if (trimmedLine.matches("^第[一二三四五六七八九十百千万零\\d]+[章节篇部].*") ||
+                    trimmedLine.matches("^[一二三四五六七八九十]+、.*") ||
+                    trimmedLine.matches("^\\d+[\\.、．].*")) {
+                return trimmedLine;
+            }
+        }
+
+        return null;
     }
 
     @Override

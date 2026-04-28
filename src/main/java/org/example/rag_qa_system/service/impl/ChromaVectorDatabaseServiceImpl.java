@@ -1,11 +1,13 @@
 package org.example.rag_qa_system.service.impl;
 
+import org.example.rag_qa_system.dto.SearchResult;
 import org.example.rag_qa_system.entity.DocumentChunk;
 import org.example.rag_qa_system.service.EmbeddingService;
 import org.example.rag_qa_system.service.VectorDatabaseService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -39,6 +41,16 @@ public class ChromaVectorDatabaseServiceImpl implements VectorDatabaseService {
 
         // 返回模拟结果
         return List.of();
+    }
+
+    @Override
+    public List<SearchResult> searchSimilarChunksWithDistance(float[] queryVector, int topK) {
+        // 这里应该调用Chroma API搜索相似向量
+        // 模拟搜索结果
+        System.out.println("搜索相似向量(带距离): queryVector=" + java.util.Arrays.toString(queryVector) + ", topK=" + topK);
+
+        // 返回模拟结果
+        return new ArrayList<>();
     }
 
     @Override

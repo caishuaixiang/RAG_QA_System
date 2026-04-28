@@ -1,5 +1,6 @@
 package org.example.rag_qa_system.service;
 
+import org.example.rag_qa_system.dto.SearchResult;
 import org.example.rag_qa_system.entity.DocumentChunk;
 
 import java.util.List;
@@ -23,6 +24,14 @@ public interface VectorDatabaseService {
      * @return 相关切片列表
      */
     List<DocumentChunk> searchSimilarChunks(float[] queryVector, int topK);
+
+    /**
+     * 检索相关切片（带距离值）
+     * @param queryVector 查询向量
+     * @param topK 返回前K个结果
+     * @return 搜索结果列表（包含切片和距离）
+     */
+    List<SearchResult> searchSimilarChunksWithDistance(float[] queryVector, int topK);
 
     /**
      * 删除文档切片

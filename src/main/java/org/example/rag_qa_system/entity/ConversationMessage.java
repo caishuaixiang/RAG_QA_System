@@ -38,6 +38,11 @@ public class ConversationMessage implements Serializable {
     private String content;
 
     /**
+     * 答案来源信息（JSON格式，仅assistant消息有）
+     */
+    private String sources;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createTime;

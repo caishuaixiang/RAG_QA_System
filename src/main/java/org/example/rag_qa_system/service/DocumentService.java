@@ -19,6 +19,15 @@ public interface DocumentService {
     Document uploadDocument(MultipartFile file, String knowledgeDomain) throws Exception;
 
     /**
+     * 上传文档（带用户ID）
+     * @param file 文档文件
+     * @param knowledgeDomain 知识域分类
+     * @param userId 用户ID
+     * @return 文档信息
+     */
+    Document uploadDocument(MultipartFile file, String knowledgeDomain, Long userId) throws Exception;
+
+    /**
      * 获取文档列表
      * @param knowledgeDomain 知识域（可选）
      * @param status 状态（可选）
