@@ -10,6 +10,7 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientException;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -196,6 +197,105 @@ public class LLMUtils {
         } catch (RestClientException e) {
             throw new RuntimeException("LLM API request failed: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 生成回答（带对话历史）
+     * @param question 问题
+     * @param context 上下文信息
+     * @param history 对话历史（List<Map<String, String>>，每个Map包含role和content）
+     * @return 回答
+     */
+    public String generateAnswerWithHistory(String question, String context, List<Map<String, String>> history) {
+        try {
+            // 准备请求头
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Authorization", "Bearer " + llmApiKey);
+
+            Map<String, Object> request = new HashMap<>();
+            List<Map<String, Object>> messages = new ArrayList<>();
+
+            // 添加系统提示
+            Map<String, Object> systemMessage = new HashMap<>();
+            systemMessage.put("role", "system");
+            systemMessage.put("content", "你是一个智能助手，请根据提供的信息回答问题。如果用户的问题涉及到之前的对话内容，请结合上下文回答。");
+            messages.add(systemMessage);
+
+            // 添加对话历史
+            if (history != null && !history.isEmpty()) {
+                for (Map<String, String> msg : history) {
+                    Map<String, Object> historyMessage = new HashMap<>();
+                    historyMessage.put("role", msg.get("role"));
+                    historyMessage.put("content", msg.get("content"));
+                    messages.add(historyMessage);
+                }
+            }
+
+            // 添加当前问题
+            Map<String, Object> userMessage = new HashMap<>();
+            userMessage.put("role", "user");
+            userMessage.put("content", "【相关信息】" + context + "\n\n【问题】" + question + "\n\n要求：\n1. 只基于上述信息和对话历史回答，不要编造\n2. 如果信息不足，回答\"暂无相关资料\"\n3. 用简洁中文回答");
+            messages.add(userMessage);
+
+            request.put("model", getLLMModel());
+            request.put("messages", messages);
+
+            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, headers);
+
+            Map<String, Object> response = restTemplate.postForObject(
+                    llmApiUrl,
+                    requestEntity,
+                    Map.class
+            );
+
+            System.out.println("LLM API Response: " + response);
+            return extractResponseContent(response);
+
+        } catch (HttpClientErrorException e) {
+            throw new RuntimeException("LLM API error: " + e.getResponseBodyAsString(), e);
+        } catch (RestClientException e) {
+            throw new RuntimeException("LLM API request failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 从LLM响应中提取内容
+     */
+    private String extractResponseContent(Map<String, Object> response) {
+        if (response == null) {
+            return "无法生成回答";
+        }
+
+        switch (llmApiType.toLowerCase()) {
+            case "qwen":
+                if (response.containsKey("output")) {
+                    Map<String, Object> output = (Map<String, Object>) response.get("output");
+                    return (String) output.get("text");
+                }
+                break;
+
+            case "wenxin":
+                if (response.containsKey("result")) {
+                    return (String) response.get("result");
+                }
+                break;
+
+            case "openai":
+            default:
+                if (response.containsKey("choices")) {
+                    List<?> choices = (List<?>) response.get("choices");
+                    if (choices != null && !choices.isEmpty()) {
+                        Map<String, Object> choice = (Map<String, Object>) choices.get(0);
+                        Map<String, Object> message = (Map<String, Object>) choice.get("message");
+                        if (message != null) {
+                            return (String) message.get("content");
+                        }
+                    }
+                }
+                break;
+        }
+        return "无法生成回答";
     }
 
     /**

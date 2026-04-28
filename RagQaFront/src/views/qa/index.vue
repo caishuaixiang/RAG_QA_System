@@ -4,13 +4,19 @@
       <!-- 问答区域 -->
       <div class="qa-main">
         <div class="qa-header">
-          <h1>智能问答</h1>
-          <p>基于知识库的智能问答系统，为您精准解答问题</p >
+          <div class="header-left">
+            <h1>智能问答</h1>
+            <p>基于知识库的智能问答系统，为您精准解答问题</p >
+          </div>
+          <el-button type="primary" @click="createNewConversation">
+            <el-icon><Plus /></el-icon>
+            新对话
+          </el-button>
         </div>
 
         <!-- 对话区域 -->
         <div class="chat-container" ref="chatContainer">
-          <div class="chat-messages">
+          <div class="chat-messages" v-if="messages.length > 0">
             <div
               v-for="(msg, index) in messages"
               :key="index"
@@ -66,6 +72,13 @@
               </div>
             </div>
           </div>
+
+          <!-- 空状态 -->
+          <div class="empty-chat" v-else>
+            <el-empty description="开始新对话">
+              <el-button type="primary" @click="focusInput">开始提问</el-button>
+            </el-empty>
+          </div>
         </div>
 
         <!-- 输入区域 -->
@@ -84,6 +97,7 @@
           </el-select>
           <div class="input-wrapper">
             <el-input
+              ref="inputRef"
               v-model="question"
               type="textarea"
               :rows="2"
@@ -109,23 +123,32 @@
         <el-card class="history-card">
           <template #header>
             <div class="card-header">
-              <span>历史记录</span>
-              <el-button type="primary" link @click="clearHistory">
-                清空
+              <span>会话列表</span>
+              <el-button type="primary" link @click="clearCurrentConversation" :disabled="!currentConversationId">
+                清空当前
               </el-button>
             </div>
           </template>
           <div class="history-list">
             <div
-              v-for="item in historyList"
+              v-for="item in conversationList"
               :key="item.id"
-              class="history-item"
-              @click="selectHistoryItem(item)"
+              :class="['history-item', { active: currentConversationId === item.id }]"
+              @click="selectConversation(item)"
             >
-              <div class="history-question">{{ item.question }}</div>
-              <div class="history-time">{{ item.createTime }}</div>
+              <div class="history-title">{{ item.title }}</div>
+              <div class="history-time">{{ formatDateTime(item.updateTime) }}</div>
+              <el-button
+                type="danger"
+                link
+                size="small"
+                class="delete-btn"
+                @click.stop="deleteConversation(item)"
+              >
+                删除
+              </el-button>
             </div>
-            <el-empty v-if="historyList.length === 0" description="暂无历史记录" />
+            <el-empty v-if="conversationList.length === 0" description="暂无会话" />
           </div>
         </el-card>
       </div>
@@ -143,7 +166,8 @@ import {
   UserFilled,
   ChatDotRound,
   Document,
-  Promotion
+  Promotion,
+  Plus
 } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
@@ -152,13 +176,16 @@ const question = ref('')
 const selectedKnowledge = ref(null)
 const loading = ref(false)
 const messages = ref([])
+const conversationList = ref([])
 const historyList = ref([])
 const knowledgeList = ref([])
 const chatContainer = ref(null)
+const inputRef = ref(null)
+const currentConversationId = ref(null)
 
 onMounted(() => {
   loadKnowledgeList()
-  loadHistory()
+  loadConversations()
 })
 
 const loadKnowledgeList = async () => {
@@ -175,14 +202,114 @@ const loadKnowledgeList = async () => {
   }
 }
 
-const loadHistory = async () => {
+const loadConversations = async () => {
   try {
-    const res = await qaApi.getHistory({ page: 1, size: 10 })
+    const res = await qaApi.getConversations(userStore.userInfo?.id)
     if (res.code === 200) {
-      historyList.value = res.data?.list || []
+      conversationList.value = res.data || []
     }
   } catch (error) {
-    console.error('加载历史记录失败', error)
+    console.error('加载会话列表失败', error)
+  }
+}
+
+const createNewConversation = async () => {
+  messages.value = []
+  currentConversationId.value = null
+  focusInput()
+}
+
+const selectConversation = async (item) => {
+  currentConversationId.value = item.id
+  messages.value = []
+
+  try {
+    const res = await qaApi.getConversationMessages(item.id)
+    if (res.code === 200) {
+      const msgs = res.data || []
+      // 将消息转换为显示格式
+      messages.value = msgs.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+        time: formatDateTime(msg.createTime),
+        sources: [] // 历史消息不显示来源
+      }))
+      scrollToBottom()
+    }
+  } catch (error) {
+    console.error('加载会话消息失败', error)
+  }
+}
+
+const deleteConversation = async (item) => {
+  try {
+    await ElMessageBox.confirm('确定要删除此会话吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+
+    const res = await qaApi.deleteConversation(item.id)
+    if (res.code === 200) {
+      ElMessage.success('删除成功')
+      conversationList.value = conversationList.value.filter(c => c.id !== item.id)
+      if (currentConversationId.value === item.id) {
+        messages.value = []
+        currentConversationId.value = null
+      }
+    }
+  } catch (error) {
+    // 用户取消
+  }
+}
+
+const clearCurrentConversation = async () => {
+  if (!currentConversationId.value) return
+
+  try {
+    // 先检查消息数量
+    const countRes = await qaApi.getMessageCount(currentConversationId.value)
+    if (countRes.code === 200) {
+      const { count, rounds } = countRes.data
+
+      if (rounds > 10) {
+        // 超过10轮，提示用户清理
+        await ElMessageBox.confirm(
+          `当前会话有 ${rounds} 轮对话，建议清理最早的对话以释放空间。是否清理最早的10轮？`,
+          '提示',
+          {
+            confirmButtonText: '清理',
+            cancelButtonText: '取消',
+            type: 'info'
+          }
+        )
+
+        const res = await qaApi.deleteOldestRounds(currentConversationId.value, 10)
+        if (res.code === 200) {
+          ElMessage.success(`已清理10轮对话，剩余 ${res.data.remainingRounds} 轮`)
+          // 重新加载消息
+          const currentConv = conversationList.value.find(c => c.id === currentConversationId.value)
+          if (currentConv) {
+            selectConversation(currentConv)
+          }
+        }
+      } else {
+        // 不多，直接清空
+        await ElMessageBox.confirm('确定要清空当前会话的所有消息吗？', '提示', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        })
+
+        const res = await qaApi.clearConversationMessages(currentConversationId.value)
+        if (res.code === 200) {
+          ElMessage.success('清空成功')
+          messages.value = []
+        }
+      }
+    }
+  } catch (error) {
+    // 用户取消
   }
 }
 
@@ -203,14 +330,22 @@ const handleSubmit = async () => {
   loading.value = true
 
   try {
-    const res = await qaApi.askQuestion({
+    const res = await qaApi.chat({
       question: userQuestion,
       userId: userStore.userInfo?.id,
-      knowledgeId: selectedKnowledge.value
+      conversationId: currentConversationId.value
     })
 
     if (res.code === 200) {
       const data = res.data
+
+      // 更新会话ID（如果是新会话）
+      if (!currentConversationId.value) {
+        currentConversationId.value = data.conversationId
+        // 刷新会话列表
+        loadConversations()
+      }
+
       messages.value.push({
         role: 'assistant',
         content: data.answer,
@@ -233,43 +368,13 @@ const handleSubmit = async () => {
   } finally {
     loading.value = false
     scrollToBottom()
-    loadHistory()
   }
 }
 
-const selectHistoryItem = (item) => {
-  // 加载历史问答
-  messages.value = [
-    {
-      role: 'user',
-      content: item.question,
-      time: item.createTime
-    },
-    {
-      role: 'assistant',
-      content: item.answer,
-      sources: item.sources ? JSON.parse(item.sources) : [],
-      time: item.createTime
-    }
-  ]
-}
-
-const clearHistory = async () => {
-  try {
-    await ElMessageBox.confirm('确定要清空所有历史记录吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-
-    const res = await qaApi.clearHistory(userStore.userInfo?.id)
-    if (res.code === 200) {
-      ElMessage.success('清空成功')
-      historyList.value = []
-    }
-  } catch (error) {
-    // 用户取消
-  }
+const focusInput = () => {
+  nextTick(() => {
+    inputRef.value?.focus()
+  })
 }
 
 const scrollToBottom = () => {
@@ -290,6 +395,17 @@ const formatMessage = (content) => {
 
 const formatTime = (date) => {
   return date.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return ''
+  const date = new Date(dateStr)
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
     hour: '2-digit',
     minute: '2-digit'
   })
@@ -320,15 +436,21 @@ const formatTime = (date) => {
   .qa-header {
     padding: 20px;
     border-bottom: 1px solid #ebeef5;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 
-    h1 {
-      font-size: 20px;
-      margin-bottom: 4px;
-    }
+    .header-left {
+      h1 {
+        font-size: 20px;
+        margin-bottom: 4px;
+      }
 
-    p {
-      font-size: 14px;
-      color: #909399;
+      p {
+        font-size: 14px;
+        color: #909399;
+        margin: 0;
+      }
     }
   }
 
@@ -336,6 +458,13 @@ const formatTime = (date) => {
     flex: 1;
     overflow-y: auto;
     padding: 20px;
+
+    .empty-chat {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+    }
 
     .message {
       display: flex;
@@ -367,8 +496,7 @@ const formatTime = (date) => {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
       }
-
-      .message-content {
+            .message-content {
         display: flex;
         flex-direction: column;
         max-width: 70%;
@@ -464,7 +592,7 @@ const formatTime = (date) => {
     }
   }
 
-    .input-container {
+  .input-container {
     padding: 20px;
     border-top: 1px solid #ebeef5;
 
@@ -511,23 +639,43 @@ const formatTime = (date) => {
         border-radius: 8px;
         cursor: pointer;
         transition: background 0.3s;
+        position: relative;
 
         &:hover {
           background: #f5f7fa;
         }
 
-        .history-question {
+        &.active {
+          background: #ecf5ff;
+          border: 1px solid #409eff;
+        }
+
+        .history-title {
           font-size: 14px;
           color: #303133;
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          padding-right: 40px;
         }
 
         .history-time {
           font-size: 12px;
           color: #c0c4cc;
           margin-top: 4px;
+        }
+
+        .delete-btn {
+          position: absolute;
+          right: 8px;
+          top: 50%;
+          transform: translateY(-50%);
+          opacity: 0;
+          transition: opacity 0.3s;
+        }
+
+        &:hover .delete-btn {
+          opacity: 1;
         }
       }
     }
