@@ -126,8 +126,19 @@ public class DocumentServiceImpl implements DocumentService {
             throw new Exception("文档不存在");
         }
 
-        // 解析文档内容
-        String content = documentParser.parseDocument(document.getFilePath());
+        String content;
+        List<DocumentParser.PagePosition> pagePositions = null;
+
+        // 解析文档内容，PDF文件提取页码信息
+        if (document.getFilePath() != null && document.getFilePath().toLowerCase().endsWith(".pdf")) {
+            DocumentParser.ParseResult parseResult = documentParser.parsePdfWithPageInfo(document.getFilePath());
+            content = parseResult.getContent();
+            pagePositions = parseResult.getPagePositions();
+            System.out.println("PDF parsed with " + (pagePositions != null ? pagePositions.size() : 0) + " pages");
+        } else {
+            content = documentParser.parseDocument(document.getFilePath());
+        }
+
         document.setContent(content);
         document.setStatus(1); // 已处理
         document.setUpdateTime(LocalDateTime.now());
@@ -139,8 +150,8 @@ public class DocumentServiceImpl implements DocumentService {
         // 提取章节信息
         List<TextChunker.SectionInfo> sections = TextChunker.extractSections(content);
 
-        // 创建文档切片（包含位置溯源信息）
-        documentChunkService.createChunksWithLocation(documentId, chunkResults, sections);
+        // 创建文档切片（包含位置溯源信息和页码）
+        documentChunkService.createChunksWithLocation(documentId, chunkResults, sections, pagePositions);
 
         // 向量化
         List<DocumentChunk> documentChunks = documentChunkService.getChunksByDocumentId(documentId);

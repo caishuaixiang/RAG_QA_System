@@ -3,6 +3,7 @@ package org.example.rag_qa_system.service.impl;
 import org.example.rag_qa_system.entity.DocumentChunk;
 import org.example.rag_qa_system.mapper.DocumentChunkMapper;
 import org.example.rag_qa_system.service.DocumentChunkService;
+import org.example.rag_qa_system.utils.DocumentParser;
 import org.example.rag_qa_system.utils.TextChunker;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -39,6 +40,13 @@ public class DocumentChunkServiceImpl implements DocumentChunkService {
     @Override
     public void createChunksWithLocation(Long documentId, List<TextChunker.ChunkResult> chunkResults,
                                          List<TextChunker.SectionInfo> sections) {
+        createChunksWithLocation(documentId, chunkResults, sections, null);
+    }
+
+    @Override
+    public void createChunksWithLocation(Long documentId, List<TextChunker.ChunkResult> chunkResults,
+                                         List<TextChunker.SectionInfo> sections,
+                                         List<DocumentParser.PagePosition> pagePositions) {
         // 清除现有切片
         deleteChunksByDocumentId(documentId);
 
@@ -57,6 +65,12 @@ public class DocumentChunkServiceImpl implements DocumentChunkService {
             chunk.setEndPosition(result.getEndIndex());
             chunk.setParagraphIndex(result.getParagraphIndex());
             chunk.setLineRange(result.getLineRange());
+
+            // 设置页码（如果有）
+            if (pagePositions != null && !pagePositions.isEmpty()) {
+                Integer pageNumber = DocumentParser.getPageNumber(result.getStartIndex(), pagePositions);
+                chunk.setPageNumber(pageNumber);
+            }
 
             // 优先从切片内容中提取标题
             String contentTitle = extractTitleFromContent(result.getContent());
@@ -99,43 +113,52 @@ public class DocumentChunkServiceImpl implements DocumentChunkService {
         }
 
         String[] lines = content.split("\\r?\\n");
+        String lastPotentialTitle = null;
 
-        for (String line : lines) {
-            String trimmedLine = line.trim();
+        for (int i = 0; i < lines.length && i < 10; i++) {  // 只检查前10行
+            String line = lines[i].trim();
 
-            // 跳过空行和太短的行
-            if (trimmedLine.isEmpty() || trimmedLine.length() < 5 || trimmedLine.length() > 50) {
+            // 跳过空行和纯数字（页码）
+            if (line.isEmpty() || line.matches("^\\d+$")) {
+                continue;
+            }
+
+            // 跳过太短或太长的行
+            if (line.length() < 5 || line.length() > 50) {
                 continue;
             }
 
             // 不以标点符号结尾（除顿号、书名号）
-            char lastChar = trimmedLine.charAt(trimmedLine.length() - 1);
+            char lastChar = line.charAt(line.length() - 1);
             if ("。！？，；：、.!?,:;".indexOf(lastChar) >= 0) {
                 continue;
             }
 
             // 检查是否是手册名称格式（如"西安科技大学研究生请假制度"）
-            if (trimmedLine.matches(".*[大学学院学校].*[制度规定办法条例守则手册指南].*")) {
-                return trimmedLine;
+            if (line.matches(".*[大学学院学校].*[制度规定办法条例守则手册指南].*")) {
+                return line;
             }
 
             // 检查是否包含关键词结尾
             String[] endKeywords = {"制度", "规定", "办法", "条例", "守则", "手册", "指南", "须知"};
             for (String keyword : endKeywords) {
-                if (trimmedLine.endsWith(keyword)) {
-                    return trimmedLine;
+                if (line.endsWith(keyword)) {
+                    // 记录这个潜在标题，但继续查找更好的
+                    if (lastPotentialTitle == null || line.contains("大学") || line.contains("学院")) {
+                        lastPotentialTitle = line;
+                    }
                 }
             }
 
             // 检查是否是章节标题格式
-            if (trimmedLine.matches("^第[一二三四五六七八九十百千万零\\d]+[章节篇部].*") ||
-                    trimmedLine.matches("^[一二三四五六七八九十]+、.*") ||
-                    trimmedLine.matches("^\\d+[\\.、．].*")) {
-                return trimmedLine;
+            if (line.matches("^第[一二三四五六七八九十百千万零\\d]+[章节篇部].*") ||
+                    line.matches("^[一二三四五六七八九十]+、.*") ||
+                    line.matches("^\\d+[\\.、．].*")) {
+                return line;
             }
         }
 
-        return null;
+        return lastPotentialTitle;
     }
 
     @Override
