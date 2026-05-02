@@ -39,3 +39,4 @@ The system follows a strict 4-layer decoupled architecture:
 | **AI Models** | **MiMo V2.5 / V2.5-Pro**, bge-large-zh-v1.5 | Long-context generation, Agent reasoning, Embedding |
 
 ## 🔄 RAG Workflow (MiMo Optimized)
+
