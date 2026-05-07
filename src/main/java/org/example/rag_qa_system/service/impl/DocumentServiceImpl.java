@@ -126,6 +126,15 @@ public class DocumentServiceImpl implements DocumentService {
             throw new Exception("文档不存在");
         }
 
+        // 如果已经处理过，先删除旧数据和向量，避免重复
+        if (document.getStatus() != null && document.getStatus() == 1) {
+            System.out.println("[DocumentService] Document " + documentId + " already processed, cleaning old data first");
+            // 删除旧向量
+            vectorDatabaseService.deleteChunksFromVectorDB(documentId);
+            // 删除旧切片
+            documentChunkService.deleteChunksByDocumentId(documentId);
+        }
+
         String content;
         List<DocumentParser.PagePosition> pagePositions = null;
 

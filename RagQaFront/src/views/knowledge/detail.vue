@@ -125,9 +125,10 @@
                   type="primary"
                   link
                   @click="processDocument(row)"
+                  :disabled="processingDocs.has(row.id)"
                   v-if="row.status === 0"
                 >
-                  处理
+                  {{ processingDocs.has(row.id) ? '处理中' : '处理' }}
                 </el-button>
                 <el-popconfirm
                   title="确定要删除此文档吗？"
@@ -312,6 +313,9 @@ const previewContent = ref('')
 // 编辑对话框
 const editDialogVisible = ref(false)
 const editLoading = ref(false)
+
+// 正在处理的文档ID集合，防止重复点击
+const processingDocs = ref(new Set())
 const editFormRef = ref(null)
 const editForm = reactive({
   id: null,
@@ -421,6 +425,12 @@ const previewDocument = async (row) => {
 
 // 处理文档（向量化）
 const processDocument = async (row) => {
+  // 检查是否正在处理
+  if (processingDocs.value.has(row.id)) {
+    ElMessage.warning('文档正在处理中，请勿重复点击')
+    return
+  }
+  processingDocs.value.add(row.id)
   try {
     await documentApi.processDocument(row.id)
     ElMessage.success('已开始处理，请稍候刷新查看')
@@ -428,6 +438,8 @@ const processDocument = async (row) => {
     loadStats()
   } catch (error) {
     ElMessage.error('处理失败')
+  } finally {
+    processingDocs.value.delete(row.id)
   }
 }
 

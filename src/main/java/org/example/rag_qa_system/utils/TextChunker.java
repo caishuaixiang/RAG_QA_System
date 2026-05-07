@@ -1,7 +1,9 @@
 package org.example.rag_qa_system.utils;
 
+import java.text.BreakIterator;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -25,16 +27,6 @@ public class TextChunker {
      * 段落分隔正则（匹配一个或多个连续换行符）
      */
     private static final Pattern PARAGRAPH_PATTERN = Pattern.compile("\\n\\n+|\\r\\n\\r\\n+");
-
-    /**
-     * 句子分隔正则（匹配中英文句子结束符）
-     */
-    private static final Pattern SENTENCE_PATTERN = Pattern.compile("([。！？.!?]+\\s*)");
-
-    /**
-     * 行分隔正则
-     */
-    private static final Pattern LINE_PATTERN = Pattern.compile("\\r?\\n|\\r");
 
     /**
      * 切片结果类，包含切片内容和位置信息
@@ -398,27 +390,25 @@ public class TextChunker {
 
         return paragraphs;
     }
+
     /**
      * 按句子分割文本，返回句子信息列表
+     * 使用 Unicode 标准边界检测（支持中文、英文、日文等）
      */
     private static List<SentenceInfo> splitIntoSentences(String text, int offset) {
         List<SentenceInfo> sentences = new ArrayList<>();
-        Matcher matcher = SENTENCE_PATTERN.matcher(text);
-
-        int lastEnd = 0;
-        while (matcher.find()) {
-            String sentence = text.substring(lastEnd, matcher.end()).trim();
-            if (!sentence.isEmpty()) {
-                sentences.add(new SentenceInfo(sentence, offset + lastEnd));
-            }
-            lastEnd = matcher.end();
+        if (text == null || text.isEmpty()) {
+            return sentences;
         }
 
-        // 处理最后一个句子（可能没有结束符）
-        if (lastEnd < text.length()) {
-            String sentence = text.substring(lastEnd).trim();
+        BreakIterator iterator = BreakIterator.getSentenceInstance(Locale.CHINESE);
+        iterator.setText(text);
+
+        int start = iterator.first();
+        for (int end = iterator.next(); end != BreakIterator.DONE; start = end, end = iterator.next()) {
+            String sentence = text.substring(start, end).trim();
             if (!sentence.isEmpty()) {
-                sentences.add(new SentenceInfo(sentence, offset + lastEnd));
+                sentences.add(new SentenceInfo(sentence, offset + start));
             }
         }
 
