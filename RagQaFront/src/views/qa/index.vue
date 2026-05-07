@@ -369,7 +369,8 @@ const handleSubmit = async () => {
     const res = await qaApi.chat({
       question: userQuestion,
       userId: userStore.userInfo.id,
-      conversationId: currentConversationId.value
+      conversationId: currentConversationId.value,
+      knowledgeBaseId: selectedKnowledge.value
     })
 
     if (res.code === 200) {

@@ -1,11 +1,14 @@
 package org.example.rag_qa_system.service.impl;
 
 import org.example.rag_qa_system.dto.SearchResult;
+import org.example.rag_qa_system.entity.Document;
 import org.example.rag_qa_system.entity.DocumentChunk;
 import org.example.rag_qa_system.service.DocumentChunkService;
+import org.example.rag_qa_system.service.DocumentService;
 import org.example.rag_qa_system.service.VectorDatabaseService;
 import org.example.rag_qa_system.utils.VectorUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -26,6 +29,10 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
 
     @Autowired
     private DocumentChunkService documentChunkService;
+
+    @Lazy
+    @Autowired
+    private DocumentService documentService;
 
     @Autowired
     private RestTemplate restTemplate;
@@ -149,6 +156,16 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
             Map<String, Object> metadata = new HashMap<>();
             metadata.put("document_id", documentId);
             metadata.put("chunk_index", chunk.getChunkIndex());
+            // 添加知识库ID（用于知识库隔离）
+            Document document = documentService.getDocumentById(documentId);
+            if (document != null && document.getKnowledgeDomain() != null) {
+                try {
+                    Long knowledgeBaseId = Long.parseLong(document.getKnowledgeDomain());
+                    metadata.put("knowledge_base_id", knowledgeBaseId);
+                } catch (NumberFormatException e) {
+                    // knowledgeDomain不是数字，忽略
+                }
+            }
             // 添加位置溯源信息
             if (chunk.getSectionTitle() != null && !chunk.getSectionTitle().isEmpty()) {
                 metadata.put("section_title", chunk.getSectionTitle());
@@ -199,17 +216,29 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
 
     @Override
     public List<DocumentChunk> searchSimilarChunks(float[] queryVector, int topK) {
+        return searchSimilarChunks(queryVector, topK, null);
+    }
+
+    @Override
+    public List<DocumentChunk> searchSimilarChunks(float[] queryVector, int topK, Long knowledgeBaseId) {
         String collId = getOrCreateCollectionId();
         if (collId == null) {
             System.err.println("Failed to get collection ID");
             return new ArrayList<>();
         }
-        System.out.println("Searching in collection: " + collId + " with topK: " + topK);
+        System.out.println("Searching in collection: " + collId + " with topK: " + topK + ", knowledgeBaseId: " + knowledgeBaseId);
 
         // ChromaDB query 格式
         Map<String, Object> request = new HashMap<>();
         request.put("query_embeddings", Arrays.asList(queryVector));
         request.put("n_results", topK);
+
+        // 添加知识库过滤条件
+        if (knowledgeBaseId != null) {
+            Map<String, Object> where = new HashMap<>();
+            where.put("knowledge_base_id", knowledgeBaseId);
+            request.put("where", where);
+        }
 
         HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, createHeaders());
 
@@ -282,17 +311,29 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
 
     @Override
     public List<SearchResult> searchSimilarChunksWithDistance(float[] queryVector, int topK) {
+        return searchSimilarChunksWithDistance(queryVector, topK, null);
+    }
+
+    @Override
+    public List<SearchResult> searchSimilarChunksWithDistance(float[] queryVector, int topK, Long knowledgeBaseId) {
         String collId = getOrCreateCollectionId();
         if (collId == null) {
             System.err.println("Failed to get collection ID");
             return new ArrayList<>();
         }
-        System.out.println("Searching in collection: " + collId + " with topK: " + topK);
+        System.out.println("Searching in collection: " + collId + " with topK: " + topK + ", knowledgeBaseId: " + knowledgeBaseId);
 
         // ChromaDB query 格式
         Map<String, Object> request = new HashMap<>();
         request.put("query_embeddings", Arrays.asList(queryVector));
         request.put("n_results", topK);
+
+        // 添加知识库过滤条件
+        if (knowledgeBaseId != null) {
+            Map<String, Object> where = new HashMap<>();
+            where.put("knowledge_base_id", knowledgeBaseId);
+            request.put("where", where);
+        }
 
         HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, createHeaders());
 

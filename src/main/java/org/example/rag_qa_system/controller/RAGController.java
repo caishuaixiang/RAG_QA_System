@@ -56,11 +56,13 @@ public class RAGController {
      * 问答
      * @param question 问题
      * @param userId 用户ID
+     * @param knowledgeBaseId 知识库ID（可选，为null时查询所有知识库）
      * @return 回答结果
      */
     @PostMapping("/ask")
     public Result askQuestion(@RequestParam String question,
-                              @RequestParam Long userId) {
+                              @RequestParam Long userId,
+                              @RequestParam(required = false) Long knowledgeBaseId) {
         String answer = null;
         String sourceInfo = null;
         String relatedDocumentIds = null;
@@ -70,8 +72,8 @@ public class RAGController {
             // 1. 向量化问题
             float[] questionVector = vectorUtils.getVector(question);
 
-            // 2. 检索相关文档切片
-            Map<String, Object> searchResult = searchRelevantChunks(questionVector);
+            // 2. 检索相关文档切片（支持知识库过滤）
+            Map<String, Object> searchResult = searchRelevantChunks(questionVector, knowledgeBaseId);
             List<String> relevantChunks = (List<String>) searchResult.get("chunks");
             sourceInfo = (String) searchResult.get("sourceInfo");
             relatedDocumentIds = (String) searchResult.get("relatedDocumentIds");
@@ -111,12 +113,14 @@ public class RAGController {
      * @param question 问题
      * @param userId 用户ID
      * @param conversationId 会话ID（可选，不传则创建新会话）
+     * @param knowledgeBaseId 知识库ID（可选，为null时查询所有知识库）
      * @return 回答结果（包含会话ID）
      */
     @PostMapping("/chat")
     public Result chat(@RequestParam String question,
                        @RequestParam Long userId,
-                       @RequestParam(required = false) String conversationId) {
+                       @RequestParam(required = false) String conversationId,
+                       @RequestParam(required = false) Long knowledgeBaseId) {
         String answer = null;
         String sourceInfo = null;
         String relatedDocumentIds = null;
@@ -137,8 +141,8 @@ public class RAGController {
             // 2. 向量化问题
             float[] questionVector = vectorUtils.getVector(question);
 
-            // 3. 检索相关文档切片
-            Map<String, Object> searchResult = searchRelevantChunks(questionVector);
+            // 3. 检索相关文档切片（支持知识库过滤）
+            Map<String, Object> searchResult = searchRelevantChunks(questionVector, knowledgeBaseId);
             List<String> relevantChunks = (List<String>) searchResult.get("chunks");
             sourceInfo = (String) searchResult.get("sourceInfo");
             relatedDocumentIds = (String) searchResult.get("relatedDocumentIds");
@@ -262,12 +266,14 @@ public class RAGController {
     /**
      * 检索相关文档切片
      * @param questionVector 问题向量
+     * @param knowledgeBaseId 知识库ID（可选，为null时查询所有知识库）
      * @return 相关文档切片及其来源信息
      */
-    private Map<String, Object> searchRelevantChunks(float[] questionVector) {
+    private Map<String, Object> searchRelevantChunks(float[] questionVector, Long knowledgeBaseId) {
         // 使用向量数据库检索最相关的切片（数量由配置决定），获取真实距离值
-        List<SearchResult> searchResults = vectorDatabaseService.searchSimilarChunksWithDistance(questionVector, defaultTopK);
-        System.out.println("Found " + searchResults.size() + " relevant chunks from vector DB");
+        List<SearchResult> searchResults = vectorDatabaseService.searchSimilarChunksWithDistance(questionVector, defaultTopK, knowledgeBaseId);
+        System.out.println("Found " + searchResults.size() + " relevant chunks from vector DB" + 
+                          (knowledgeBaseId != null ? " (knowledgeBaseId: " + knowledgeBaseId + ")" : ""));
 
         List<String> chunkContents = new ArrayList<>();
         Map<Long, Document> documentMap = new HashMap<>();

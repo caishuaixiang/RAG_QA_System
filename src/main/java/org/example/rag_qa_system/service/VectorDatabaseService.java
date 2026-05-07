@@ -26,12 +26,30 @@ public interface VectorDatabaseService {
     List<DocumentChunk> searchSimilarChunks(float[] queryVector, int topK);
 
     /**
+     * 检索相关切片（带知识库过滤）
+     * @param queryVector 查询向量
+     * @param topK 返回前K个结果
+     * @param knowledgeBaseId 知识库ID（可选，为null时查询所有知识库）
+     * @return 相关切片列表
+     */
+    List<DocumentChunk> searchSimilarChunks(float[] queryVector, int topK, Long knowledgeBaseId);
+
+    /**
      * 检索相关切片（带距离值）
      * @param queryVector 查询向量
      * @param topK 返回前K个结果
      * @return 搜索结果列表（包含切片和距离）
      */
     List<SearchResult> searchSimilarChunksWithDistance(float[] queryVector, int topK);
+
+    /**
+     * 检索相关切片（带距离值和知识库过滤）
+     * @param queryVector 查询向量
+     * @param topK 返回前K个结果
+     * @param knowledgeBaseId 知识库ID（可选，为null时查询所有知识库）
+     * @return 搜索结果列表（包含切片和距离）
+     */
+    List<SearchResult> searchSimilarChunksWithDistance(float[] queryVector, int topK, Long knowledgeBaseId);
 
     /**
      * 删除文档切片

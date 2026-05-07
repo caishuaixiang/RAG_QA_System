@@ -260,6 +260,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { knowledgeApi } from '@/api/knowledge'
 import { documentApi } from '@/api/document'
+import { useUserStore } from '@/stores/user'
 import Cookies from 'js-cookie'
 import {
   FolderOpened,
@@ -273,6 +274,7 @@ import {
 const route = useRoute()
 const router = useRouter()
 const knowledgeId = computed(() => route.params.id)
+const userStore = useUserStore()
 
 const loading = ref(false)
 const knowledge = ref({})
@@ -398,6 +400,11 @@ const customUpload = async (options) => {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('knowledgeDomain', knowledgeId.value)
+  // 添加 userId
+  const userId = userStore.userInfo?.id
+  if (userId) {
+    formData.append('userId', userId)
+  }
 
   try {
     await documentApi.uploadDocument(formData)
