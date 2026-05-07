@@ -59,7 +59,7 @@ public class LLMUtils {
                             }},
                             new HashMap<String, Object>() {{
                                 put("role", "user");
-                                put("content", "【相关信息】" + context + "\n【问题】" + question + "\n要求：\n1. 只基于上述信息回答，不要编造\n2. 如果信息不足，回答\"暂无相关资料\"\n3. 用简洁中文回答");
+                                put("content", "【相关信息】" + context + "\n【问题】" + question + "\n要求：\n1. 仅依据提供的相关信息作答，严禁编造、扩充、联想内容\n2. 信息不足时，统一回复：暂无相关资料\n3. 回答准确完整、语句通顺，无需刻意精简");
                             }}
                     });
                     break;
@@ -70,7 +70,7 @@ public class LLMUtils {
                     request.put("messages", new Object[]{
                             new HashMap<String, Object>() {{
                                 put("role", "user");
-                                put("content", "【相关信息】" + context + "\n【问题】" + question + "\n要求：\n1. 只基于上述信息回答，不要编造\n2. 如果信息不足，回答\"暂无相关资料\"\n3. 用简洁中文回答");
+                                put("content", "【相关信息】" + context + "\n【问题】" + question + "\n要求：\n1. 仅依据提供的相关信息作答，严禁编造、扩充、联想内容\n2. 信息不足时，统一回复：暂无相关资料\n3. 回答准确完整、语句通顺，无需刻意精简");
                             }}
                     });
                     break;
@@ -85,7 +85,7 @@ public class LLMUtils {
                             }},
                             new HashMap<String, Object>() {{
                                 put("role", "user");
-                                put("content", "【相关信息】" + context + "\n\n【问题】" + question + "\n\n要求：\n1. 只基于上述信息回答，不要编造\n2. 如果信息不足，回答\"暂无相关资料\"\n3. 用简洁中文回答");
+                                put("content", "【相关信息】" + context + "\n【问题】" + question + "\n要求：\n1. 仅依据提供的相关信息作答，严禁编造、扩充、联想内容\n2. 信息不足时，统一回复：暂无相关资料\n3. 回答准确完整、语句通顺，无需刻意精简");
                             }}
                     });
                     break;
@@ -101,7 +101,7 @@ public class LLMUtils {
                     request.put("messages", new Object[]{
                             new HashMap<String, Object>() {{
                                 put("role", "user");
-                                put("content", "【相关信息】" + context + "\n\n【问题】" + question + "\n\n要求：\n1. 只基于上述信息回答，不要编造\n2. 如果信息不足，回答\"暂无相关资料\"\n3. 用简洁中文回答");
+                                put("content", "【相关信息】" + context + "\n【问题】" + question + "\n要求：\n1. 仅依据提供的相关信息作答，严禁编造、扩充、联想内容\n2. 信息不足时，统一回复：暂无相关资料\n3. 回答准确完整、语句通顺，无需刻意精简");
                             }}
                     });
                     break;
@@ -115,7 +115,7 @@ public class LLMUtils {
                             }},
                             new HashMap<String, Object>() {{
                                 put("role", "user");
-                                put("content", "【相关信息】" + context + "\n【问题】" + question + "\n要求：\n1. 只基于上述信息回答，不要编造\n2. 如果信息不足，回答\"暂无相关资料\"\n3. 用简洁中文回答");
+                                put("content", "【相关信息】" + context + "\n【问题】" + question + "\n要求：\n1. 仅依据提供的相关信息作答，严禁编造、扩充、联想内容\n2. 信息不足时，统一回复：暂无相关资料\n3. 回答准确完整、语句通顺，无需刻意精简");
                             }}
                     });
             }
@@ -235,7 +235,7 @@ public class LLMUtils {
             // 添加当前问题
             Map<String, Object> userMessage = new HashMap<>();
             userMessage.put("role", "user");
-            userMessage.put("content", "【相关信息】" + context + "\n\n【问题】" + question + "\n\n要求：\n1. 只基于上述信息和对话历史回答，不要编造\n2. 如果信息不足，回答\"暂无相关资料\"\n3. 用简洁中文回答");
+            userMessage.put("content", "【相关信息】" + context + "\n\n【问题】" + question + "\n\n要求：\n1. 严格只基于给出的相关信息和对话历史作答，禁止编造、脑补额外内容\n2. 若现有信息不足以回答问题，统一回复：暂无相关资料\n3. 回答条理清晰、表述通顺即可，无需刻意精简压缩");
             messages.add(userMessage);
 
             request.put("model", getLLMModel());
