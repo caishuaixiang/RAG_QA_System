@@ -181,6 +181,19 @@ public class RAGController {
             return Result.success(responseData);
         } catch (Exception e) {
             return Result.error("问答失败: " + e.getMessage());
+        } finally {
+            // 无论成功失败都保存问答记录到问答历史表
+            try {
+                QuestionAnswer qa = new QuestionAnswer();
+                qa.setUserId(userId);
+                qa.setQuestion(question);
+                qa.setAnswer(answer != null ? answer : "问答失败");
+                qa.setVectorIds(relatedDocumentIds);
+                qa.setSource(sourceInfo);
+                questionAnswerService.saveQuestionAnswer(qa);
+            } catch (Exception saveEx) {
+                // 保存失败不影响主流程
+            }
         }
     }
 
