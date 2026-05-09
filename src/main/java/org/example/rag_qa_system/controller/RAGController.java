@@ -7,15 +7,15 @@ import org.example.rag_qa_system.utils.LLMUtils;
 import org.example.rag_qa_system.utils.Result;
 import org.example.rag_qa_system.utils.SourceInfo;
 import org.example.rag_qa_system.utils.VectorUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * RAG问答控制器
@@ -23,6 +23,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/rag")
 public class RAGController {
+
+    private static final Logger logger = LoggerFactory.getLogger(RAGController.class);
 
     @Autowired
     private VectorUtils vectorUtils;
@@ -277,7 +279,7 @@ public class RAGController {
     }
 
     /**
-     * 检索相关文档切片
+     * 检索相关文档切片（带去重）
      * @param questionVector 问题向量
      * @param knowledgeBaseId 知识库ID（可选，为null时查询所有知识库）
      * @return 相关文档切片及其来源信息
@@ -292,9 +294,18 @@ public class RAGController {
         Map<Long, Document> documentMap = new HashMap<>();
         List<Double> similarities = new ArrayList<>();
         List<DocumentChunk> relevantChunks = new ArrayList<>();
+        Set<String> addedChunkKeys = new HashSet<>(); // 用于去重
 
         for (SearchResult searchResult : searchResults) {
             DocumentChunk chunk = searchResult.getChunk();
+            
+            // 去重：使用 documentId + chunkId 作为 key
+            String chunkKey = chunk.getDocumentId() + "_" + chunk.getId();
+            if (addedChunkKeys.contains(chunkKey)) {
+                continue;
+            }
+            addedChunkKeys.add(chunkKey);
+            
             relevantChunks.add(chunk);
             chunkContents.add(chunk.getChunkContent());
 
@@ -316,6 +327,8 @@ public class RAGController {
             // 使用真实距离值计算相似度
             similarities.add(searchResult.getSimilarityPercentage());
         }
+
+        logger.info("Naive RAG: 向量检索 {} 条，去重后 {} 条", searchResults.size(), relevantChunks.size());
 
         // 创建详细的答案来源信息（包含位置溯源）
         String sourceInfo = SourceInfo.createDetailedSourceInfo(relevantChunks, documentMap, similarities);
