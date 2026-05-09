@@ -219,7 +219,12 @@ public class LLMUtils {
             // 添加系统提示
             Map<String, Object> systemMessage = new HashMap<>();
             systemMessage.put("role", "system");
-            systemMessage.put("content", "你是一个智能助手，请根据提供的信息回答问题。如果用户的问题涉及到之前的对话内容，请结合上下文回答。");
+            systemMessage.put("content", "你是一个专业的问答助手。请注意：\n" +
+                    "1. 严格基于提供的【相关信息】回答当前【问题】\n" +
+                    "2. 仔细理解用户当前问题的真实意图，不要假设用户在问之前问过的问题\n" +
+                    "3. 如果用户问的是新问题（如怎么销假），请回答这个新问题，而不是重复回答之前的问题（如如何请假）\n" +
+                    "4. 【相关信息】中可能包含多个来源，请只使用与当前问题相关的内容\n" +
+                    "5. 如果相关信息不足以回答当前问题，请回复：暂无相关资料");
             messages.add(systemMessage);
 
             // 添加对话历史
@@ -235,7 +240,15 @@ public class LLMUtils {
             // 添加当前问题
             Map<String, Object> userMessage = new HashMap<>();
             userMessage.put("role", "user");
-            userMessage.put("content", "【相关信息】" + context + "\n\n【问题】" + question + "\n\n要求：\n1. 严格只基于给出的相关信息和对话历史作答，禁止编造、脑补额外内容\n2. 若现有信息不足以回答问题，统一回复：暂无相关资料\n3. 回答条理清晰、表述通顺即可，无需刻意精简压缩");
+            userMessage.put("content", "【对话历史摘要】以下是之前的对话，请理解上下文但重点关注当前问题：\n" +
+                    buildHistorySummary(history) + "\n\n" +
+                    "【相关信息】以下是从知识库中检索到的与当前问题相关的内容：\n" + context + "\n\n" +
+                    "【当前问题】" + question + "\n\n" +
+                    "【回答要求】\n" +
+                    "1. 只回答当前【问题】，不要回答对话历史中的其他问题\n" +
+                    "2. 严格基于【相关信息】作答，禁止编造内容\n" +
+                    "3. 如果【相关信息】中没有与当前问题相关的内容，回复：暂无相关资料\n" +
+                    "4. 回答要准确、完整、条理清晰");
             messages.add(userMessage);
 
             request.put("model", getLLMModel());
@@ -315,5 +328,34 @@ public class LLMUtils {
             default:
                 return "glm-4-flash";
         }
+    }
+
+    /**
+     * 构建对话历史摘要（限制长度，避免token超限）
+     * @param history 对话历史
+     * @return 历史摘要字符串
+     */
+    private String buildHistorySummary(List<Map<String, String>> history) {
+        if (history == null || history.isEmpty()) {
+            return "（无对话历史）";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        // 只取最近的几轮对话
+        int maxHistoryItems = 4; // 最多2轮对话（4条消息）
+        int startIndex = Math.max(0, history.size() - maxHistoryItems);
+
+        for (int i = startIndex; i < history.size(); i++) {
+            Map<String, String> msg = history.get(i);
+            String role = "user".equals(msg.get("role")) ? "用户" : "助手";
+            String content = msg.get("content");
+            // 截断过长的内容
+            if (content != null && content.length() > 200) {
+                content = content.substring(0, 200) + "...";
+            }
+            sb.append(role).append("：").append(content).append("\n");
+        }
+
+        return sb.toString().trim();
     }
 }

@@ -362,6 +362,29 @@ public class VectorDatabaseServiceImpl implements VectorDatabaseService {
 
                     for (int i = 0; i < idList.size(); i++) {
                         DocumentChunk chunk = new DocumentChunk();
+
+                        // 从ChromaDB返回的ID解析chunk ID（格式: documentId_chunkIndex）
+                        String chromaId = idList.get(i);
+                        // 尝试解析格式: documentId_chunkIndex
+                        Long chunkId = null;
+                        try {
+                            String[] parts = chromaId.split("_");
+                            if (parts.length >= 2) {
+                                // 使用 chunkIndex 配合 documentId 从 MySQL 查找真实 ID
+                                Long documentId = Long.parseLong(parts[0]);
+                                Integer chunkIndex = Integer.parseInt(parts[parts.length - 1]);
+                                chunk.setDocumentId(documentId);
+                                chunk.setChunkIndex(chunkIndex);
+                                // 临时用 chunkIndex 作为 ID，后续会完善
+                                chunkId = (long) chunkIndex;
+                            }
+                        } catch (Exception e) {
+                            // 解析失败，使用序号
+                        }
+                        if (chunkId == null) {
+                            chunkId = (long) (i + 1);
+                        }
+                        chunk.setId(chunkId);
                         chunk.setChunkContent(docList.size() > i ? docList.get(i) : "");
 
                         if (metaList.size() > i) {

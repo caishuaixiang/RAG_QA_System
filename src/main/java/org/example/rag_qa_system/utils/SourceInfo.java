@@ -77,7 +77,13 @@ public class SourceInfo {
             source.put("document_name", doc != null ? doc.getName() : "未知文档");
             source.put("knowledge_domain", doc != null ? doc.getKnowledgeDomain() : "未知领域");
             source.put("chunk_index", chunk.getChunkIndex());
-            source.put("similarity", Math.round(similarity * 100.0) / 100.0);  // 保留两位小数，百分比形式
+
+            // 只有正值才添加相似度，0或负数表示BM25独有（关键词命中）
+            if (similarity > 0) {
+                source.put("similarity", Math.round(similarity * 100.0) / 100.0);  // 保留两位小数，百分比形式
+            } else {
+                source.put("bm25_only", true);  // 标记为仅BM25命中
+            }
 
             // 位置溯源信息
             Map<String, Object> location = new HashMap<>();
@@ -347,8 +353,11 @@ public class SourceInfo {
             sb.append("  文档：").append(source.get("document_name")).append("\n");
 
             Object similarity = source.get("similarity");
-            if (similarity != null) {
+            Boolean bm25Only = (Boolean) source.get("bm25_only");
+            if (similarity != null && (Double) similarity > 0) {
                 sb.append("  相关度：").append(similarity).append("%\n");
+            } else if (bm25Only != null && bm25Only) {
+                sb.append("  命中方式：关键词命中\n");
             }
 
             Object location = source.get("location");

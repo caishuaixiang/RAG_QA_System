@@ -1,5 +1,6 @@
 package org.example.rag_qa_system.controller;
 
+import org.example.rag_qa_system.dto.HybridDoc;
 import org.example.rag_qa_system.dto.SearchResult;
 import org.example.rag_qa_system.entity.*;
 import org.example.rag_qa_system.service.*;
@@ -7,15 +8,15 @@ import org.example.rag_qa_system.utils.LLMUtils;
 import org.example.rag_qa_system.utils.Result;
 import org.example.rag_qa_system.utils.SourceInfo;
 import org.example.rag_qa_system.utils.VectorUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * RAG问答控制器
@@ -23,6 +24,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/rag")
 public class RAGController {
+
+    private static final Logger logger = LoggerFactory.getLogger(RAGController.class);
 
     @Autowired
     private VectorUtils vectorUtils;
@@ -46,11 +49,32 @@ public class RAGController {
     @Qualifier("vectorDatabaseServiceImpl")
     private VectorDatabaseService vectorDatabaseService;
 
+    @Autowired
+    private HybridSearchService hybridSearchService;
+
+    @Autowired
+    private RerankService rerankService;
+
     @Value("${rag.search.topK:5}")
     private int defaultTopK;
 
     @Value("${rag.history.rounds:3}")
     private int historyRounds;
+
+    @Value("${rag.hybrid.enabled:false}")
+    private boolean hybridEnabled;
+
+    @Value("${rag.hybrid.initialK:20}")
+    private int hybridInitialK;
+
+    @Value("${rag.hybrid.finalK:10}")
+    private int hybridFinalK;
+
+    @Value("${rag.rerank.enabled:false}")
+    private boolean rerankEnabled;
+
+    @Value("${siliconflow.rerank.top-n:5}")
+    private int rerankTopN;
 
     /**
      * 问答
@@ -69,12 +93,19 @@ public class RAGController {
         String errorMessage = null;
 
         try {
-            // 1. 向量化问题
-            float[] questionVector = vectorUtils.getVector(question);
+            List<String> relevantChunks;
+            Map<String, Object> searchResult;
 
-            // 2. 检索相关文档切片（支持知识库过滤）
-            Map<String, Object> searchResult = searchRelevantChunks(questionVector, knowledgeBaseId);
-            List<String> relevantChunks = (List<String>) searchResult.get("chunks");
+            if (hybridEnabled) {
+                // 混合检索 + 重排序模式
+                searchResult = searchRelevantChunksHybrid(question, knowledgeBaseId);
+            } else {
+                // 原有向量检索模式
+                float[] questionVector = vectorUtils.getVector(question);
+                searchResult = searchRelevantChunks(questionVector, knowledgeBaseId);
+            }
+
+            relevantChunks = (List<String>) searchResult.get("chunks");
             sourceInfo = (String) searchResult.get("sourceInfo");
             relatedDocumentIds = (String) searchResult.get("relatedDocumentIds");
 
@@ -90,6 +121,7 @@ public class RAGController {
 
             return Result.success(responseData);
         } catch (Exception e) {
+            logger.error("问答失败", e);
             return Result.error("问答失败: " + e.getMessage());
         } finally {
             // 无论成功失败都保存问答记录
@@ -138,16 +170,24 @@ public class RAGController {
                 }
             }
 
-            // 2. 向量化问题
-            float[] questionVector = vectorUtils.getVector(question);
+            // 2. 检索相关文档切片
+            List<String> relevantChunks;
+            Map<String, Object> searchResult;
 
-            // 3. 检索相关文档切片（支持知识库过滤）
-            Map<String, Object> searchResult = searchRelevantChunks(questionVector, knowledgeBaseId);
-            List<String> relevantChunks = (List<String>) searchResult.get("chunks");
+            if (hybridEnabled) {
+                // 混合检索 + 重排序模式
+                searchResult = searchRelevantChunksHybrid(question, knowledgeBaseId);
+            } else {
+                // 原有向量检索模式
+                float[] questionVector = vectorUtils.getVector(question);
+                searchResult = searchRelevantChunks(questionVector, knowledgeBaseId);
+            }
+
+            relevantChunks = (List<String>) searchResult.get("chunks");
             sourceInfo = (String) searchResult.get("sourceInfo");
             relatedDocumentIds = (String) searchResult.get("relatedDocumentIds");
 
-            // 4. 获取对话历史
+            // 3. 获取对话历史
             List<ConversationMessage> historyMessages = conversationService.getRecentMessages(conversationId, historyRounds);
             List<Map<String, String>> history = new ArrayList<>();
             for (ConversationMessage msg : historyMessages) {
@@ -157,21 +197,21 @@ public class RAGController {
                 history.add(historyItem);
             }
 
-            // 5. 生成回答（带历史）
+            // 4. 生成回答（带历史）
             String context = String.join("\n", relevantChunks);
             answer = llmUtils.generateAnswerWithHistory(question, context, history);
 
-            // 6. 保存对话消息
+            // 5. 保存对话消息
             conversationService.addMessage(conversationId, "user", question);
             conversationService.addMessage(conversationId, "assistant", answer,sourceInfo);
 
-            // 7. 如果是新会话，用第一个问题作为标题
+            // 6. 如果是新会话，用第一个问题作为标题
             if ("新对话".equals(conversation.getTitle()) && question.length() > 0) {
                 String title = question.length() > 30 ? question.substring(0, 30) + "..." : question;
                 conversationService.updateTitle(conversationId, title);
             }
 
-            // 8. 构建返回结果
+            // 7. 构建返回结果
             Map<String, Object> responseData = new HashMap<>();
             responseData.put("answer", answer);
             responseData.put("conversationId", conversationId);
@@ -180,6 +220,7 @@ public class RAGController {
 
             return Result.success(responseData);
         } catch (Exception e) {
+            logger.error("问答失败", e);
             return Result.error("问答失败: " + e.getMessage());
         } finally {
             // 无论成功失败都保存问答记录到问答历史表
@@ -323,6 +364,124 @@ public class RAGController {
 
         Map<String, Object> result = new HashMap<>();
         result.put("chunks", chunkContents);
+        result.put("sourceInfo", sourceInfo);
+        result.put("relatedDocumentIds", relatedDocumentIds);
+
+        return result;
+    }
+
+    /**
+     * 检索相关文档切片（混合检索 + 重排序模式）
+     * 流程：混合检索(BM25+向量) → RRF融合 → 重排序 → 取topN
+     * @param question 问题文本
+     * @param knowledgeBaseId 知识库ID（暂未使用，保留接口兼容）
+     * @return 相关文档切片及其来源信息
+     */
+    private Map<String, Object> searchRelevantChunksHybrid(String question, Long knowledgeBaseId) {
+        logger.info("混合检索模式启动，question='{}', knowledgeBaseId={}", question, knowledgeBaseId);
+
+        // 1. 执行混合检索（BM25 + 向量检索，RRF融合，支持知识库隔离）
+        List<HybridDoc> hybridDocs = hybridSearchService.hybridSearch(question, hybridInitialK, hybridFinalK, knowledgeBaseId);
+        logger.info("混合检索完成，返回 {} 条候选文档", hybridDocs.size());
+
+        // 2. 重排序（如果启用）
+        List<String> finalContents;
+        if (rerankEnabled && !hybridDocs.isEmpty()) {
+            List<String> candidateContents = new ArrayList<>();
+            for (HybridDoc doc : hybridDocs) {
+                candidateContents.add(doc.getContent());
+            }
+
+            logger.info("开始重排序，候选文档 {} 条", candidateContents.size());
+            finalContents = rerankService.rerankDocuments(question, candidateContents);
+            logger.info("重排序完成，返回 {} 条结果", finalContents.size());
+        } else {
+            // 不启用重排序时，直接使用混合检索结果
+            finalContents = new ArrayList<>();
+            for (HybridDoc doc : hybridDocs) {
+                finalContents.add(doc.getContent());
+            }
+        }
+
+        // 3. 构建溯源信息（带去重）
+        // 只使用最终用于生成回答的文档（finalContents对应的）
+        List<DocumentChunk> relevantChunks = new ArrayList<>();
+        Map<Long, Document> documentMap = new HashMap<>();
+        List<Double> similarities = new ArrayList<>();
+        Set<String> addedChunkKeys = new HashSet<>(); // 用于去重：documentId_chunkId
+
+        // 构建content到HybridDoc的映射，用于获取相似度和命中标记
+        Map<String, HybridDoc> contentDocMap = new HashMap<>();
+        for (HybridDoc hd : hybridDocs) {
+            contentDocMap.put(hd.getContent(), hd);
+        }
+
+        // 只对finalContents中的文档构建溯源信息（去重处理）
+        for (String content : finalContents) {
+            HybridDoc hd = contentDocMap.get(content);
+            if (hd == null) continue;
+
+            // 生成去重key
+            String chunkKey = hd.getSourceDocId() + "_" + hd.getDocId();
+            if (addedChunkKeys.contains(chunkKey)) {
+                logger.debug("跳过重复来源: {}", chunkKey);
+                continue;
+            }
+            addedChunkKeys.add(chunkKey);
+
+            // 添加相似度
+            if (hd.isVectorHit()) {
+                similarities.add(hd.getVectorSimilarity());
+            } else {
+                // BM25独有文档，标记为关键词命中（存储为负数，前端识别显示"关键词命中"）
+                similarities.add(-1.0);
+            }
+
+            // 获取chunk信息
+            try {
+                String docIdStr = hd.getDocId();
+                if (docIdStr != null && !docIdStr.isEmpty()) {
+                    Long chunkId = Long.parseLong(docIdStr);
+                    DocumentChunk chunk = documentChunkService.getChunksByDocumentId(hd.getSourceDocId())
+                            .stream()
+                            .filter(c -> c.getId().equals(chunkId))
+                            .findFirst()
+                            .orElseGet(() -> {
+                                DocumentChunk c = new DocumentChunk();
+                                c.setId(chunkId);
+                                c.setChunkContent(content);
+                                c.setDocumentId(hd.getSourceDocId());
+                                return c;
+                            });
+                    relevantChunks.add(chunk);
+
+                    // 获取文档信息
+                    if (hd.getSourceDocId() != null && !documentMap.containsKey(hd.getSourceDocId())) {
+                        Document document = documentService.getDocumentById(hd.getSourceDocId());
+                        if (document != null) {
+                            documentMap.put(hd.getSourceDocId(), document);
+                        } else {
+                            Document defaultDoc = new Document();
+                            defaultDoc.setId(hd.getSourceDocId());
+                            defaultDoc.setName("文档" + hd.getSourceDocId());
+                            defaultDoc.setKnowledgeDomain("未知领域");
+                            documentMap.put(hd.getSourceDocId(), defaultDoc);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                logger.warn("构建溯源信息时异常", e);
+            }
+        }
+
+        logger.info("构建溯源信息完成，去重后 {} 个来源 (原始 {} 个)", relevantChunks.size(), finalContents.size());
+
+        // 创建详细的答案来源信息
+        String sourceInfo = SourceInfo.createDetailedSourceInfo(relevantChunks, documentMap, similarities);
+        String relatedDocumentIds = SourceInfo.createRelatedChunkIds(relevantChunks);
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("chunks", finalContents);
         result.put("sourceInfo", sourceInfo);
         result.put("relatedDocumentIds", relatedDocumentIds);
 

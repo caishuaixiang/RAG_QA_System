@@ -66,10 +66,24 @@ public interface DocumentChunkMapper {
     int deleteByDocumentId(Long documentId);
 
     /**
+     * 查询所有文档切片（用于BM25索引构建）
+     */
+    @Select("SELECT * FROM document_chunk")
+    List<DocumentChunk> selectAll();
+
+    /**
      * 统计切片总数
      */
     @Select("SELECT COUNT(*) FROM document_chunk")
     int count();
+
+    /**
+     * 根据知识库ID获取文档ID列表（用于BM25知识库隔离）
+     */
+    @Select("SELECT DISTINCT dc.document_id FROM document_chunk dc " +
+            "JOIN document d ON dc.document_id = d.id " +
+            "WHERE d.knowledge_domain = #{knowledgeBaseId}")
+    List<Long> findDocumentIdsByKnowledgeBaseId(String knowledgeBaseId);
 
     /**
      * 根据用户ID统计切片数量

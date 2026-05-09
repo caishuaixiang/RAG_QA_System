@@ -51,8 +51,14 @@
                            <div class="source-name">{{ source.document_name }}</div>
                          </div>
                          <div class="source-similarity">
-                           <el-tag :type="getSimilarityTagType(source.similarity)" size="small">
+                           <el-tag v-if="source.similarity !== undefined && source.similarity !== null" :type="getSimilarityTagType(source.similarity)" size="small">
                              相关度：{{ source.similarity }}%
+                           </el-tag>
+                           <el-tag v-else-if="source.bm25_only" type="info" size="small">
+                             关键词命中
+                           </el-tag>
+                           <el-tag v-else type="info" size="small">
+                             -
                            </el-tag>
                          </div>
                        </div>
@@ -254,6 +260,8 @@ const selectConversation = async (item) => {
         if (msg.role === 'assistant' && msg.sources) {
           try {
             sources = typeof msg.sources === 'string' ? JSON.parse(msg.sources) : msg.sources
+            // 去重处理
+            sources = deduplicateSources(sources)
           } catch (e) {
             console.error('解析sources失败', e)
           }
@@ -386,7 +394,7 @@ const handleSubmit = async () => {
       messages.value.push({
         role: 'assistant',
         content: data.answer,
-        sources: data.sources,
+        sources: deduplicateSources(data.sources),
         time: formatTime(new Date())
       })
     } else {
@@ -532,6 +540,24 @@ const getSourceTitle = (source) => {
   }
 
   return ''
+}
+
+// 去重来源列表（基于document_name + content_preview）
+const deduplicateSources = (sources) => {
+  if (!sources || sources.length === 0) return sources
+  
+  const seen = new Set()
+  return sources.filter(source => {
+    // 生成去重key：文档名 + 内容预览前50字符
+    const preview = source.content_preview ? source.content_preview.substring(0, 50) : ''
+    const key = `${source.document_name || ''}_${preview}`
+    
+    if (seen.has(key)) {
+      return false
+    }
+    seen.add(key)
+    return true
+  })
 }
 </script>
 

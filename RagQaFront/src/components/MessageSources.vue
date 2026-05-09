@@ -20,8 +20,14 @@
             <div class="source-name">{{ source.document_name }}</div>
           </div>
           <div class="source-similarity">
-            <el-tag :type="getSimilarityTagType(source.similarity)" size="small">
+            <el-tag v-if="source.similarity !== undefined && source.similarity !== null" :type="getSimilarityTagType(source.similarity)" size="small">
               相关度：{{ source.similarity }}%
+            </el-tag>
+            <el-tag v-else-if="source.bm25_only" type="info" size="small">
+              关键词命中
+            </el-tag>
+            <el-tag v-else type="info" size="small">
+              -
             </el-tag>
           </div>
         </div>
