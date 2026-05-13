@@ -86,45 +86,10 @@ public class SourceInfo {
             }
 
             // 位置溯源信息
-            Map<String, Object> location = new HashMap<>();
-
-            // 字符位置
-            if (chunk.getStartPosition() != null && chunk.getEndPosition() != null) {
-                location.put("char_range", chunk.getStartPosition() + "-" + chunk.getEndPosition());
-                location.put("start_char", chunk.getStartPosition());
-                location.put("end_char", chunk.getEndPosition());
-            }
-
-            // 页码（对于PDF等分页文档）
-            if (chunk.getPageNumber() != null) {
-                location.put("page_number", chunk.getPageNumber());
-            }
-
-            // 章节标题 - 优先使用有效的标题
-            String sectionTitle = extractValidTitle(chunk.getSectionTitle(), chunk.getChunkContent());
-            if (sectionTitle != null && !sectionTitle.isEmpty()) {
-                location.put("section_title", sectionTitle);
-            }
-
-            // 段落序号
-            if (chunk.getParagraphIndex() != null) {
-                location.put("paragraph_index", chunk.getParagraphIndex());
-            }
-
-            // 行号范围
-            if (chunk.getLineRange() != null && !chunk.getLineRange().isEmpty()) {
-                location.put("line_range", chunk.getLineRange());
-            }
-
-            source.put("location", location);
+            source.put("location", buildLocationInfo(chunk));
 
             // 切片内容预览（前100字符）
-            String content = chunk.getChunkContent();
-            if (content != null && content.length() > 100) {
-                source.put("content_preview", content.substring(0, 100) + "...");
-            } else {
-                source.put("content_preview", content);
-            }
+            source.put("content_preview", truncateContent(chunk.getChunkContent(), 100));
 
             sources.add(source);
         }
@@ -244,6 +209,58 @@ public class SourceInfo {
         }
 
         return null;
+    }
+
+    /**
+     * 构建位置溯源信息
+     */
+    private static Map<String, Object> buildLocationInfo(DocumentChunk chunk) {
+        Map<String, Object> location = new HashMap<>();
+
+        putIfNotNull(location, "page_number", chunk.getPageNumber());
+        putIfNotNull(location, "paragraph_index", chunk.getParagraphIndex());
+        putIfNotEmpty(location, "line_range", chunk.getLineRange());
+
+        // 字符位置
+        if (chunk.getStartPosition() != null && chunk.getEndPosition() != null) {
+            location.put("char_range", chunk.getStartPosition() + "-" + chunk.getEndPosition());
+            location.put("start_char", chunk.getStartPosition());
+            location.put("end_char", chunk.getEndPosition());
+        }
+
+        // 章节标题
+        String sectionTitle = extractValidTitle(chunk.getSectionTitle(), chunk.getChunkContent());
+        putIfNotEmpty(location, "section_title", sectionTitle);
+
+        return location;
+    }
+
+    /**
+     * 截断内容到指定长度
+     */
+    private static String truncateContent(String content, int maxLength) {
+        if (content == null) {
+            return null;
+        }
+        return content.length() > maxLength ? content.substring(0, maxLength) + "..." : content;
+    }
+
+    /**
+     * Map辅助方法：value不为null时放入
+     */
+    private static void putIfNotNull(Map<String, Object> map, String key, Object value) {
+        if (value != null) {
+            map.put(key, value);
+        }
+    }
+
+    /**
+     * Map辅助方法：value不为null且非空时放入
+     */
+    private static void putIfNotEmpty(Map<String, Object> map, String key, String value) {
+        if (value != null && !value.isEmpty()) {
+            map.put(key, value);
+        }
     }
 
     /**
